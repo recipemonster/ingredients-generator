@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from recipemonster_data.changelog import parse_changelog, release_notes
+from src.changelog import parse_changelog, release_notes
 
 
 class ChangelogTest(unittest.TestCase):

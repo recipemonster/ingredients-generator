@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recipemonster_data.versioning import (
+from src.versioning import (
     Version,
     latest_version,
     next_patch_version,

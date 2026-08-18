@@ -6,8 +6,8 @@ from datetime import date
 from email.message import Message
 from pathlib import Path
 
-from recipemonster_data.config import Asset, Source, VersionCheck
-from recipemonster_data.download import (
+from src.config import Asset, Source, VersionCheck
+from src.download import (
     extract_asset_version,
     merge_changed_sources,
     update_asset_versions,

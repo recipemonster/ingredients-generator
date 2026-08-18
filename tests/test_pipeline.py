@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recipemonster_data.build import (
+from src.build import (
     NAME_COLUMNS,
     NUTRITION_COLUMNS,
     SUPPORTED_LANGUAGES,
@@ -16,11 +16,11 @@ from recipemonster_data.build import (
     simplify_source_names,
     validate_nutrition_links,
 )
-from recipemonster_data.config import Asset, Source, VersionCheck
-from recipemonster_data.download import download_sources
-from recipemonster_data.normalize import decimal_value, normalize_name
-from recipemonster_data.taxonomy import TaxonomyIngredient, base_ingredients, localized_names, read_ingredient_taxonomy
-from recipemonster_data.validate import validate_catalog
+from src.config import Asset, Source, VersionCheck
+from src.download import download_sources
+from src.normalize import decimal_value, normalize_name
+from src.taxonomy import TaxonomyIngredient, base_ingredients, localized_names, read_ingredient_taxonomy
+from src.validate import validate_catalog
 
 
 class PipelineTest(unittest.TestCase):
