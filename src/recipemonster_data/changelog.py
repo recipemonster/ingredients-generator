@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$")
+TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$")
 RELEASE_HEADING_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 
