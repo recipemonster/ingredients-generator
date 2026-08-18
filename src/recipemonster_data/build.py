@@ -72,7 +72,6 @@ NUTRITION_COLUMNS = (
 )
 GENERATED_FILENAMES = (
     "ATTRIBUTIONS.txt",
-    "DATA_LICENSE.md",
     "SOURCES.md",
     "ambiguous_merges.draft.csv",
     "catalog.draft.csv",
@@ -128,7 +127,7 @@ def build_catalog(
         raise ValueError(f"nutrition could not be resolved for {len(result.unresolved)} ingredients")
     write_catalog_files(output_directory, result.ingredients, draft=False)
     write_attributions(output_directory, result.sources)
-    write_release_documents(output_directory)
+    write_sources(output_directory)
     return manifest(result, release_eligible=True)
 
 
@@ -143,7 +142,7 @@ def build_catalog_draft(
     clean_output(output_directory)
     write_catalog_files(output_directory, result.ingredients, draft=True)
     write_attributions(output_directory, result.sources)
-    write_release_documents(output_directory)
+    write_sources(output_directory)
     if result.unresolved:
         write_csv(output_directory / "unresolved.draft.csv", unresolved_columns(), result.unresolved)
     return manifest(result, release_eligible=False)
@@ -473,14 +472,13 @@ def write_attributions(output_directory: Path, sources: tuple[Source, ...]) -> N
     (output_directory / "ATTRIBUTIONS.txt").write_text(text, encoding="utf-8")
 
 
-def write_release_documents(output_directory: Path) -> None:
-    for filename in ("DATA_LICENSE.md", "SOURCES.md"):
-        source = output_directory.parent / filename
-        if not source.is_file():
-            raise ValueError(f"{filename} is missing")
-        destination = output_directory / filename
-        destination.write_bytes(source.read_bytes())
-        destination.chmod(0o644)
+def write_sources(output_directory: Path) -> None:
+    source = output_directory.parent / "SOURCES.md"
+    if not source.is_file():
+        raise ValueError("SOURCES.md is missing")
+    destination = output_directory / "SOURCES.md"
+    destination.write_bytes(source.read_bytes())
+    destination.chmod(0o644)
 
 
 def write_catalog_files(
