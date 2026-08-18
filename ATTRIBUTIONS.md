@@ -5,7 +5,6 @@ RecipeMonster builds a simple multilingual ingredient catalog from the sources b
 ## Open Food Facts ingredient taxonomy
 
 - Purpose: ingredient identities and multilingual names
-- Version: 2026-08-17 snapshot
 - Source: [Open Food Facts ingredient taxonomy](https://github.com/openfoodfacts/openfoodfacts-server/blob/main/taxonomies/food/ingredients.txt)
 - Database license: [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/)
 - Content license: [Database Contents License 1.0](https://opendatacommons.org/licenses/dbcl/)
