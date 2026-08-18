@@ -10,7 +10,9 @@ The importer accepts RecipeMonster release archives named `ingredients_<language
 
 It rejects ZIP files, extra entries, paths, links, oversized files, wrong headers, duplicate IDs, duplicate taxonomy keys, names referencing unknown ingredient IDs, a missing supported-language name, unsupported nutrient units and invalid numeric values.
 
-Each language CSV row is one equal localized name linked by ingredient ID. The filename determines its language. It has no primary-name or alias semantics. Each nutrition CSV row is one global ingredient and one nutrition vector per 100 g. `nutrition_source_label` is audit evidence. It is never a user-facing name.
+Each language CSV row is one equal localized name linked by ingredient ID and technical taxonomy key. The filename determines its language. It has no primary-name or alias semantics. Every supported language contains at least one name for every ingredient.
+
+Each nutrition CSV row is an optional nutrition vector per 100 g for one ingredient. Ingredients without reliable nutrition data remain in every language catalog and have no nutrition row. `nutrition_source_label` is audit evidence. It is never a user-facing name.
 
 ## Preview
 

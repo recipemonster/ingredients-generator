@@ -5,13 +5,16 @@ import html
 from dataclasses import dataclass
 from pathlib import Path
 
-from .build import NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
+from .build import NAME_COLUMNS, NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
 from .changelog import TAG_PATTERN
+
+LEGACY_NAME_COLUMNS = ("ingredient_id", "name")
 
 
 @dataclass(frozen=True)
 class ReleaseCatalog:
     tag: str
+    identities: dict[str, str]
     nutrition: dict[str, dict[str, str]]
     names: dict[str, dict[str, tuple[str, ...]]]
 
@@ -90,12 +93,26 @@ def load_catalog(directory: Path, tag: str) -> ReleaseCatalog:
     if len(nutrition) != len(nutrition_rows):
         raise ValueError(f"{tag} has duplicate ingredient IDs")
     names: dict[str, dict[str, tuple[str, ...]]] = {}
+    identities = {ingredient_id: row["taxonomy_key"] for ingredient_id, row in nutrition.items()}
     for language in SUPPORTED_LANGUAGES:
         grouped: dict[str, list[str]] = {}
-        for row in read_csv(directory / f"ingredients_{language}.csv"):
+        rows = read_csv(directory / f"ingredients_{language}.csv")
+        columns = tuple(rows[0].keys()) if rows else ()
+        if columns not in {NAME_COLUMNS, LEGACY_NAME_COLUMNS}:
+            raise ValueError(f"{tag} has an invalid {language} ingredient catalog")
+        for row in rows:
+            ingredient_id = row["ingredient_id"]
+            if columns == NAME_COLUMNS:
+                taxonomy_key = row["taxonomy_key"]
+                existing = identities.get(ingredient_id)
+                if existing is not None and existing != taxonomy_key:
+                    raise ValueError(f"{tag} has conflicting ingredient identities")
+                identities[ingredient_id] = taxonomy_key
+            elif ingredient_id not in identities:
+                raise ValueError(f"{tag} has a legacy name without nutrition identity")
             grouped.setdefault(row["ingredient_id"], []).append(row["name"])
         names[language] = {ingredient_id: tuple(values) for ingredient_id, values in grouped.items()}
-    return ReleaseCatalog(tag=tag, nutrition=nutrition, names=names)
+    return ReleaseCatalog(tag=tag, identities=identities, nutrition=nutrition, names=names)
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -121,10 +138,10 @@ def compare_releases(previous: ReleaseCatalog | None, current: ReleaseCatalog) -
             name_changes=(),
             nutrition_changes=(),
         )
-    previous_ids = set(previous.nutrition)
-    current_ids = set(current.nutrition)
-    previous_by_key = {row["taxonomy_key"]: ingredient_id for ingredient_id, row in previous.nutrition.items()}
-    current_by_key = {row["taxonomy_key"]: ingredient_id for ingredient_id, row in current.nutrition.items()}
+    previous_ids = set(previous.identities)
+    current_ids = set(current.identities)
+    previous_by_key = {taxonomy_key: ingredient_id for ingredient_id, taxonomy_key in previous.identities.items()}
+    current_by_key = {taxonomy_key: ingredient_id for ingredient_id, taxonomy_key in current.identities.items()}
     identity_changes = tuple(
         (key, previous_by_key[key], current_by_key[key])
         for key in sorted(set(previous_by_key) & set(current_by_key))
@@ -140,11 +157,11 @@ def compare_releases(previous: ReleaseCatalog | None, current: ReleaseCatalog) -
     nutrition_changes: list[tuple[str, str, str, str]] = []
     ignored = {"ingredient_id", "taxonomy_key"}
     for ingredient_id in sorted(previous_ids & current_ids):
-        before = previous.nutrition[ingredient_id]
-        after = current.nutrition[ingredient_id]
+        before = previous.nutrition.get(ingredient_id, {})
+        after = current.nutrition.get(ingredient_id, {})
         for field in NUTRITION_COLUMNS:
-            if field not in ignored and before[field] != after[field]:
-                nutrition_changes.append((ingredient_id, field, before[field], after[field]))
+            if field not in ignored and before.get(field, "") != after.get(field, ""):
+                nutrition_changes.append((ingredient_id, field, before.get(field, ""), after.get(field, "")))
     return ReleaseDiff(
         has_previous=True,
         added=tuple(sorted(current_ids - previous_ids)),
@@ -170,7 +187,7 @@ def index_page(summaries: tuple[tuple[ReleaseCatalog, ReleaseDiff], ...]) -> str
 def index_row(catalog: ReleaseCatalog, diff: ReleaseDiff) -> str:
     prefix = (
         f"<tr><td><a href=\"releases/{escape(catalog.tag)}.html\">{escape(catalog.tag)}</a></td>"
-        f"<td>{len(catalog.nutrition)}</td>"
+        f"<td>{len(catalog.identities)}</td>"
     )
     if not diff.has_previous:
         return prefix + '<td colspan="4" class="empty">Initial release, no diff</td></tr>'
@@ -194,12 +211,12 @@ def release_page(
             f"<nav><a href=\"{escape(index_href)}\">All releases</a></nav>"
             f"<header><p class=\"eyebrow\">Initial release</p><h1>{escape(current.tag)}</h1>"
             "<p>No previous version to compare.</p></header>"
-            f"<main><section class=\"summary initial\">{summary_card('Ingredients', len(current.nutrition), 'Total in this version')}</section></main>"
+            f"<main><section class=\"summary initial\">{summary_card('Ingredients', len(current.identities), 'Total in this version')}</section></main>"
         )
         return document(f"{current.tag} release", body)
     previous_label = previous.tag
     cards = (
-        summary_card("Ingredients", len(current.nutrition), "Total in this version")
+        summary_card("Ingredients", len(current.identities), "Total in this version")
         + summary_card("Added", len(diff.added), f"Compared with {previous_label}")
         + summary_card("Removed", len(diff.removed), f"Compared with {previous_label}")
         + summary_card("Changed fields", len(diff.name_changes) + len(diff.nutrition_changes), "Names and nutrition")
@@ -221,7 +238,7 @@ def release_page(
 def ingredient_rows(catalog: ReleaseCatalog | None, ingredient_ids: tuple[str, ...]):
     if catalog is None:
         return ()
-    return tuple((ingredient_id, catalog.nutrition[ingredient_id]["taxonomy_key"]) for ingredient_id in ingredient_ids)
+    return tuple((ingredient_id, catalog.identities[ingredient_id]) for ingredient_id in ingredient_ids)
 
 
 def summary_card(label: str, value: int, detail: str) -> str:

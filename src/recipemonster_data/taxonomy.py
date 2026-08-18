@@ -127,17 +127,13 @@ def normalize_taxonomy_key(value: str) -> str:
     return normalize_name(value.removeprefix("en:").strip())
 
 
-def mapped_base_ingredients(
+def base_ingredients(
     ingredients: dict[str, TaxonomyIngredient],
 ) -> list[TaxonomyIngredient]:
-    mapped = {
-        key
-        for key, ingredient in ingredients.items()
-        if "pl" in ingredient.names and nutrition_reference(ingredient) is not None
-    }
+    candidates = set(ingredients)
     selected: list[TaxonomyIngredient] = []
-    for key in sorted(mapped):
-        if is_preparation_variant(key, ingredients, mapped):
+    for key in sorted(candidates):
+        if is_preparation_variant(key, ingredients, candidates):
             continue
         selected.append(ingredients[key])
     return selected
@@ -174,19 +170,12 @@ def nutrition_references(ingredient: TaxonomyIngredient) -> tuple[tuple[str, str
     references: list[tuple[str, str]] = []
     for property_name, dataset in (
         ("ciqual_food_code", "ciqual"),
-        ("usda_ndb_code", "usda-sr-legacy"),
         ("ciqual_proxy_food_code", "ciqual"),
-        ("usda_ndb_proxy_code", "usda-sr-legacy"),
     ):
         value = ingredient.properties.get(property_name, "").strip()
         if value:
             references.append((dataset, value))
     return tuple(dict.fromkeys(references))
-
-
-def nutrition_reference(ingredient: TaxonomyIngredient) -> tuple[str, str] | None:
-    references = nutrition_references(ingredient)
-    return references[0] if references else None
 
 
 def localized_names(ingredient: TaxonomyIngredient, language: str) -> tuple[str, ...]:

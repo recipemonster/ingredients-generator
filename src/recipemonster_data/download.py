@@ -8,7 +8,7 @@ import zipfile
 from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .config import ALLOWED_HOSTS, Asset, Source
@@ -96,12 +96,23 @@ def refresh_sources_manifest(
     snapshot_date: date | None = None,
 ) -> tuple[str, ...]:
     raw_directory.mkdir(parents=True, exist_ok=True)
-    observed: dict[tuple[str, str], dict[str, object]] = {}
+    downloaded: dict[tuple[str, str], dict[str, object]] = {}
+    observed_versions: dict[tuple[str, str], str] = {}
     for source in sources:
         for asset in source.assets:
-            if asset.manual_download:
+            identity = source.source_id, asset.asset_id
+            try:
+                observed_version = inspect_asset_version(source, asset)
+            except (HTTPError, URLError) as error:
+                if asset.manual_download:
+                    raise RuntimeError(
+                        f"version check for {source.source_id}/{asset.asset_id} was blocked by the upstream server"
+                    ) from error
+                raise
+            observed_versions[identity] = observed_version
+            if observed_version == asset.version_check.value:
                 continue
-            observed[(source.source_id, asset.asset_id)] = acquire_asset(
+            downloaded[identity] = acquire_asset(
                 source,
                 asset,
                 raw_directory,
@@ -109,11 +120,79 @@ def refresh_sources_manifest(
                 verify_pinned_checksum=False,
             )
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    changed_sources = update_source_checksums(payload, observed, snapshot_date or date.today())
+    changed_sources = update_source_checksums(payload, downloaded, snapshot_date or date.today())
+    changed_sources = merge_changed_sources(changed_sources, update_asset_versions(payload, observed_versions))
     if changed_sources:
         manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    update_download_lock(raw_directory / "download-lock.json", observed)
+    if downloaded:
+        update_download_lock(raw_directory / "download-lock.json", downloaded)
     return changed_sources
+
+
+def inspect_asset_version(source: Source, asset: Asset) -> str:
+    request = Request(
+        asset.url,
+        method="HEAD",
+        headers={
+            "Accept": "application/zip, application/xml, text/plain, text/xml, application/octet-stream",
+            "User-Agent": "RecipeMonster data builder",
+        },
+    )
+    try:
+        response = build_opener(SafeRedirectHandler()).open(request, timeout=60)
+    except HTTPError as error:
+        if error.code not in {405, 501}:
+            raise
+        request = Request(
+            asset.url,
+            headers={
+                "Accept": "application/zip, application/xml, text/plain, text/xml, application/octet-stream",
+                "Range": "bytes=0-0",
+                "User-Agent": "RecipeMonster data builder",
+            },
+        )
+        response = build_opener(SafeRedirectHandler()).open(request, timeout=60)
+    with response:
+        return extract_asset_version(source, asset, response.headers, response.geturl())
+
+
+def extract_asset_version(source: Source, asset: Asset, headers, final_url: str) -> str:
+    if asset.version_check.field == "etag":
+        value = headers.get("ETag", "").strip()
+    elif asset.version_check.field == "last-modified":
+        value = headers.get("Last-Modified", "").strip()
+    else:
+        value = headers.get_filename() or Path(unquote(urlparse(final_url).path)).name
+    if not value:
+        raise ValueError(
+            f"version check for {source.source_id}/{asset.asset_id} returned no {asset.version_check.field}"
+        )
+    return value
+
+
+def update_asset_versions(
+    payload: dict[str, object],
+    observed: dict[tuple[str, str], str],
+) -> tuple[str, ...]:
+    changed_sources: list[str] = []
+    for source in payload.get("sources", []):
+        source_id = str(source.get("id", ""))
+        source_changed = False
+        for asset in source.get("assets", []):
+            identity = source_id, str(asset.get("id", ""))
+            value = observed.get(identity)
+            check = asset.get("versionCheck")
+            if value is None or not isinstance(check, dict) or check.get("value") == value:
+                continue
+            check["value"] = value
+            source_changed = True
+        if source_changed:
+            changed_sources.append(source_id)
+    return tuple(changed_sources)
+
+
+def merge_changed_sources(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(source_id for group in groups for source_id in group))
 
 
 def update_source_checksums(

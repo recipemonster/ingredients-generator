@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import csv
-import io
 import json
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 
 from recipemonster_data.build import (
@@ -14,14 +12,14 @@ from recipemonster_data.build import (
     SUPPORTED_LANGUAGES,
     assign_ingredient_ids,
     build_catalog,
-    build_catalog_draft,
     load_previous_ingredient_ids,
     simplify_source_names,
+    validate_nutrition_links,
 )
-from recipemonster_data.config import Asset, Source
+from recipemonster_data.config import Asset, Source, VersionCheck
 from recipemonster_data.download import download_sources
 from recipemonster_data.normalize import decimal_value, normalize_name
-from recipemonster_data.taxonomy import TaxonomyIngredient, localized_names, mapped_base_ingredients, read_ingredient_taxonomy
+from recipemonster_data.taxonomy import TaxonomyIngredient, base_ingredients, localized_names, read_ingredient_taxonomy
 from recipemonster_data.validate import validate_catalog
 
 
@@ -31,9 +29,9 @@ class PipelineTest(unittest.TestCase):
             path = Path(temporary_directory) / "ingredients.txt"
             path.write_text(taxonomy_fixture(include_types=True), encoding="utf-8")
 
-            selected = mapped_base_ingredients(read_ingredient_taxonomy(path))
+            selected = base_ingredients(read_ingredient_taxonomy(path))
 
-            self.assertEqual([ingredient.key for ingredient in selected], ["apple", "cheese", "feta", "potato"])
+            self.assertEqual([ingredient.key for ingredient in selected], ["apple", "cheese", "feta", "potato", "salt"])
             self.assertEqual(selected[3].names["pl"], ("ziemniak", "ziemniaki"))
 
     def test_normalization_preserves_zero_and_less_than_qualifier(self) -> None:
@@ -71,7 +69,6 @@ class PipelineTest(unittest.TestCase):
             root = Path(temporary_directory)
             inputs = root / "inputs"
             inputs.mkdir()
-            create_usda_archive(inputs / "usda.zip")
             create_ciqual_files(inputs)
             (inputs / "ingredients.txt").write_text(taxonomy_fixture(), encoding="utf-8")
             sources = test_sources()
@@ -82,7 +79,6 @@ class PipelineTest(unittest.TestCase):
                     "ciqual/foods": inputs / "foods.xml",
                     "ciqual/nutrients": inputs / "nutrients.xml",
                     "ciqual/values": inputs / "values.xml",
-                    "usda-sr-legacy": inputs / "usda.zip",
                     "openfoodfacts-ingredients": inputs / "ingredients.txt",
                 },
             )
@@ -102,14 +98,24 @@ class PipelineTest(unittest.TestCase):
             manifest = build_catalog(sources, root / "raw", root / "dist", mappings, previous_catalog)
             result = validate_catalog(root / "dist")
 
-            self.assertEqual(manifest["ingredientCount"], 2)
+            self.assertEqual(manifest["ingredientCount"], 3)
+            self.assertEqual(manifest["nutritionCount"], 2)
+            self.assertEqual(manifest["missingNutritionCount"], 1)
             self.assertEqual(
                 result,
-                {"ingredients": 2, "names_en": 2, "names_pl": 2, "names_de": 2, "names_es": 3, "names_it": 3},
+                {
+                    "ingredients": 3,
+                    "nutrition": 2,
+                    "names_en": 3,
+                    "names_pl": 3,
+                    "names_de": 3,
+                    "names_es": 4,
+                    "names_it": 4,
+                },
             )
             nutrition = read_output_csv(root / "dist" / "nutrition.csv")
             self.assertEqual(tuple(nutrition[0]), NUTRITION_COLUMNS)
-            self.assertEqual({row["nutrition_source"] for row in nutrition}, {"ciqual", "usda-sr-legacy"})
+            self.assertEqual({row["nutrition_source"] for row in nutrition}, {"ciqual"})
             self.assertEqual(
                 {row["taxonomy_key"]: row["ingredient_id"] for row in nutrition},
                 {
@@ -122,8 +128,8 @@ class PipelineTest(unittest.TestCase):
             english = read_output_csv(root / "dist" / "ingredients_en.csv")
             polish = read_output_csv(root / "dist" / "ingredients_pl.csv")
             self.assertEqual(tuple(english[0]), NAME_COLUMNS)
-            self.assertEqual({row["name"] for row in english}, {"apple", "potato"})
-            self.assertEqual({row["name"] for row in polish}, {"jabłko", "ziemniak"})
+            self.assertEqual({row["name"] for row in english}, {"apple", "potato", "salt"})
+            self.assertEqual({row["name"] for row in polish}, {"jabłko", "ziemniak", "sól"})
             self.assertNotIn("cooked potato", {row["name"] for row in english})
             self.assertEqual(
                 (root / "dist" / "ATTRIBUTIONS.md").read_text(encoding="utf-8"),
@@ -140,26 +146,28 @@ class PipelineTest(unittest.TestCase):
                 *(f"ingredients_{language}.csv" for language in SUPPORTED_LANGUAGES),
             )
             first_build = {name: (root / "dist" / name).read_bytes() for name in generated_files}
-            (root / "dist" / "ingredients_it.csv").write_text("ingredient_id,name\n", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "missing it names"):
-                validate_catalog(root / "dist")
+            (root / "dist" / "ingredients_it.csv").write_text(
+                "ingredient_id,taxonomy_key,name\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(validate_catalog(root / "dist")["names_it"], 0)
             build_catalog(sources, root / "raw", root / "dist", mappings, previous_catalog)
             self.assertEqual(
                 {name: (root / "dist" / name).read_bytes() for name in generated_files},
                 first_build,
             )
 
-    def test_draft_reports_unresolved_nutrition_without_fake_ingredient(self) -> None:
+    def test_build_keeps_ingredient_without_nutrition_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             inputs = root / "inputs"
             inputs.mkdir()
             create_ciqual_files(inputs)
             (inputs / "ingredients.txt").write_text(
-                "en:apple\npl:jabłko\nciqual_food_code:en:missing\n",
+                "en:apple\nciqual_food_code:en:missing\n",
                 encoding="utf-8",
             )
-            sources = (test_sources()[0], test_sources()[2])
+            sources = test_sources()
             download_sources(
                 sources,
                 root / "raw",
@@ -171,13 +179,13 @@ class PipelineTest(unittest.TestCase):
                 },
             )
 
-            manifest = build_catalog_draft(sources, root / "raw", root / "dist", create_nutrient_mappings(root))
+            manifest = build_catalog(sources, root / "raw", root / "dist", create_nutrient_mappings(root))
 
-            self.assertEqual(manifest["ingredientCount"], 0)
-            self.assertEqual(manifest["unresolvedCount"], 1)
-            unresolved = read_output_csv(root / "dist" / "unresolved.draft.csv")[0]
-            self.assertEqual(unresolved["taxonomy_key"], "apple")
-            self.assertEqual(unresolved["references"], "ciqual:missing")
+            self.assertEqual(manifest["ingredientCount"], 1)
+            self.assertEqual(manifest["nutritionCount"], 0)
+            self.assertEqual(manifest["missingNutritionCount"], 1)
+            self.assertEqual(read_output_csv(root / "dist" / "nutrition.csv"), [])
+            self.assertEqual(validate_catalog(root / "dist")["ingredients"], 1)
 
     def test_validator_rejects_changed_header(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -185,6 +193,24 @@ class PipelineTest(unittest.TestCase):
             path.write_text("wrong\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid CSV header"):
                 validate_catalog(path.parent)
+
+    def test_validator_requires_an_english_identity_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            create_catalog_files(root, english_name="")
+
+            with self.assertRaisesRegex(ValueError, "missing en names"):
+                validate_catalog(root)
+
+    def test_rejects_unknown_manual_nutrition_link(self) -> None:
+        ingredient = TaxonomyIngredient(key="apple", names={"en": ("apple",)}, parents=(), properties={})
+
+        with self.assertRaisesRegex(ValueError, "unknown record: ciqual/missing"):
+            validate_nutrition_links(
+                {"apple": ("ciqual", "record", "missing")},
+                {"apple": ingredient},
+                {},
+            )
 
     def test_reuses_released_ids_and_assigns_new_ids(self) -> None:
         ingredients = {
@@ -221,6 +247,26 @@ class PipelineTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "is used by apple and potato"):
                 load_previous_ingredient_ids(path)
 
+    def test_loads_ids_from_legacy_nutrition_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "nutrition.csv"
+            with path.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=NUTRITION_COLUMNS, lineterminator="\n")
+                writer.writeheader()
+                row = {column: "" for column in NUTRITION_COLUMNS}
+                row.update(
+                    {
+                        "ingredient_id": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "taxonomy_key": "apple",
+                    }
+                )
+                writer.writerow(row)
+
+            self.assertEqual(
+                load_previous_ingredient_ids(path),
+                {"apple": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+            )
+
 
 def test_sources() -> tuple[Source, ...]:
     license_data = {"name": "test", "spdx": "LicenseRef-Test", "url": "https://example.test/license"}
@@ -234,20 +280,10 @@ def test_sources() -> tuple[Source, ...]:
             attribution="Anses",
             license=license_data,
             assets=(
-                Asset("ciqual", "foods", "https://entrepot.recherche.data.gouv.fr/a", "foods.xml", "xml", "", 100_000, False),
-                Asset("ciqual", "nutrients", "https://entrepot.recherche.data.gouv.fr/b", "nutrients.xml", "xml", "", 100_000, False),
-                Asset("ciqual", "values", "https://entrepot.recherche.data.gouv.fr/c", "values.xml", "xml", "", 100_000, False),
+                Asset("ciqual", "foods", "https://entrepot.recherche.data.gouv.fr/a", "foods.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
+                Asset("ciqual", "nutrients", "https://entrepot.recherche.data.gouv.fr/b", "nutrients.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
+                Asset("ciqual", "values", "https://entrepot.recherche.data.gouv.fr/c", "values.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
             ),
-        ),
-        Source(
-            source_id="usda-sr-legacy",
-            role="nutrition",
-            name="USDA",
-            version="1",
-            homepage="https://fdc.nal.usda.gov/download-datasets/",
-            attribution="USDA",
-            license=license_data,
-            assets=(Asset("usda-sr-legacy", "archive", "https://fdc.nal.usda.gov/a", "usda.zip", "zip", "", 1_000_000, False),),
         ),
         Source(
             source_id="openfoodfacts-ingredients",
@@ -267,6 +303,7 @@ def test_sources() -> tuple[Source, ...]:
                     "",
                     1_000_000,
                     False,
+                    VersionCheck("etag", "test"),
                 ),
             ),
         ),
@@ -298,35 +335,22 @@ def taxonomy_fixture(include_types: bool = False) -> str:
         "en:potato, potatoes\n"
         "pl:ziemniak, ziemniaki\n"
         "de:Kartoffel, Kartoffeln\n"
-        "usda_ndb_code:en:11352\n\n"
+        "ciqual_food_code:en:20000\n\n"
         "< en:potato\n"
         "en:cooked potato\n"
         "pl:ziemniak gotowany\n"
-        "usda_ndb_code:en:11367\n"
+        "ciqual_food_code:en:20001\n"
     )
-    return base + types + vegetables
-
-
-def create_usda_archive(path: Path) -> None:
-    with zipfile.ZipFile(path, "w") as archive:
-        write_csv_entry(
-            archive,
-            "food.csv",
-            [["fdc_id", "data_type", "description"], ["200", "sr_legacy_food", "Potatoes, flesh and skin, raw"]],
-        )
-        write_csv_entry(archive, "sr_legacy_food.csv", [["fdc_id", "NDB_number"], ["200", "11352"]])
-        write_csv_entry(archive, "nutrient.csv", [["id", "name", "unit_name"], ["1008", "Energy", "KCAL"]])
-        write_csv_entry(
-            archive,
-            "food_nutrient.csv",
-            [["id", "fdc_id", "nutrient_id", "amount", "min", "max", "median"], ["1", "200", "1008", "77", "", "", ""]],
-        )
+    salt = "\nen:salt\npl:sól\nde:Salz\nes:sal\nit:sale\n"
+    return base + types + vegetables + salt
 
 
 def create_ciqual_files(directory: Path) -> None:
     (directory / "foods.xml").write_text(
         "<TABLE><ALIM><alim_code>13050</alim_code><alim_nom_fr>Pomme, crue</alim_nom_fr>"
-        "<alim_nom_eng>Apple, raw</alim_nom_eng></ALIM></TABLE>",
+        "<alim_nom_eng>Apple, raw</alim_nom_eng></ALIM>"
+        "<ALIM><alim_code>20000</alim_code><alim_nom_fr>Pomme de terre, crue</alim_nom_fr>"
+        "<alim_nom_eng>Potato, raw</alim_nom_eng></ALIM></TABLE>",
         encoding="utf-8",
     )
     (directory / "nutrients.xml").write_text(
@@ -336,6 +360,8 @@ def create_ciqual_files(directory: Path) -> None:
     )
     (directory / "values.xml").write_text(
         "<TABLE><COMPO><alim_code>13050</alim_code><const_code>328</const_code><teneur>52</teneur>"
+        "<code_confiance>A</code_confiance></COMPO>"
+        "<COMPO><alim_code>20000</alim_code><const_code>328</const_code><teneur>77</teneur>"
         "<code_confiance>A</code_confiance></COMPO></TABLE>",
         encoding="utf-8",
     )
@@ -351,7 +377,6 @@ def create_nutrient_mappings(root: Path) -> Path:
                 "schemaVersion": 1,
                 "mappings": [
                     {"source": "ciqual", "sourceId": "328", "key": "energy_kcal"},
-                    {"source": "usda-sr-legacy", "sourceId": "1008", "key": "energy_kcal"},
                 ],
             }
         ),
@@ -361,26 +386,47 @@ def create_nutrient_mappings(root: Path) -> Path:
 
 
 def write_previous_catalog(root: Path, identities: dict[str, str]) -> Path:
-    path = root / "previous-nutrition.csv"
+    path = root / "previous-ingredients-en.csv"
     with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=NUTRITION_COLUMNS, lineterminator="\n")
+        writer = csv.DictWriter(file, fieldnames=NAME_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for taxonomy_key, ingredient_id in identities.items():
-            row = {column: "" for column in NUTRITION_COLUMNS}
-            row.update({"ingredient_id": ingredient_id, "taxonomy_key": taxonomy_key})
-            writer.writerow(row)
+            writer.writerow({"ingredient_id": ingredient_id, "taxonomy_key": taxonomy_key, "name": taxonomy_key})
     return path
-
-
-def write_csv_entry(archive: zipfile.ZipFile, name: str, rows: list[list[str]]) -> None:
-    output = io.StringIO(newline="")
-    csv.writer(output).writerows(rows)
-    archive.writestr(name, output.getvalue())
 
 
 def read_output_csv(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as file:
         return list(csv.DictReader(file))
+
+
+def create_catalog_files(root: Path, english_name: str) -> None:
+    ingredient_id = "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    for language in SUPPORTED_LANGUAGES:
+        path = root / f"ingredients_{language}.csv"
+        with path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=NAME_COLUMNS, lineterminator="\n")
+            writer.writeheader()
+            name = english_name if language == "en" else ("jabłko" if language == "pl" else "")
+            if name:
+                writer.writerow({"ingredient_id": ingredient_id, "taxonomy_key": "apple", "name": name})
+    with (root / "nutrition.csv").open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=NUTRITION_COLUMNS, lineterminator="\n")
+        writer.writeheader()
+        row = {column: "" for column in NUTRITION_COLUMNS}
+        row.update(
+            {
+                "ingredient_id": ingredient_id,
+                "taxonomy_key": "apple",
+                "nutrition_source": "ciqual",
+                "nutrition_source_version": "1",
+                "nutrition_source_record_id": "1",
+                "nutrition_source_label": "Apple",
+                "basis_g": "100",
+                "energy_kcal_kcal": "52",
+            }
+        )
+        writer.writerow(row)
 
 
 if __name__ == "__main__":

@@ -42,12 +42,19 @@ jobs:
           gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' > "${tags_file}"
           base_tag=$(PYTHONPATH=src python3 -m recipemonster_data --root . latest-version --published-tags "${tags_file}")
           mkdir -p .release-base
+          gh release download "${base_tag}" --pattern ingredients_en.tar.gz --dir .release-base
           gh release download "${base_tag}" --pattern nutrition.tar.gz --dir .release-base
+          tar -xzf .release-base/ingredients_en.tar.gz -C .release-base ingredients_en.csv
           tar -xzf .release-base/nutrition.tar.gz -C .release-base nutrition.csv
+          if [[ "$(head -n 1 .release-base/ingredients_en.csv | tr -d '\r')" == "ingredient_id,taxonomy_key,name" ]]; then
+            echo "catalog_path=.release-base/ingredients_en.csv" >> "${GITHUB_OUTPUT}"
+          else
+            echo "catalog_path=.release-base/nutrition.csv" >> "${GITHUB_OUTPUT}"
+          fi
           echo "tags_file=${tags_file}" >> "${GITHUB_OUTPUT}"
 
       - name: Check upstream datasets
-        run: make refresh-sources
+        run: make --no-print-directory refresh-sources
 
       - name: Detect source changes
         id: changes
@@ -71,7 +78,8 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: |
           make test
-          make build-release PREVIOUS_CATALOG=.release-base/nutrition.csv
+          make download-release
+          make build-release PREVIOUS_CATALOG="${{ steps.releases.outputs.catalog_path }}"
           make validate
 
       - name: Create or update pull request

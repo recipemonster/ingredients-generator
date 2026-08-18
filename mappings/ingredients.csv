@@ -1,9 +1,9 @@
 action,taxonomy_key,dataset,id_type,record_id
-upsert,baking soda,usda-sr-legacy,usda_ndb,18372
-upsert,barley,usda-sr-legacy,usda_ndb,20005
+upsert,baking soda,,,
+upsert,barley,,,
 exclude,biscuit,,,
 exclude,bolognese sauce,,,
-upsert,bread,usda-sr-legacy,usda_ndb,18064
+upsert,bread,,,
 upsert,carrot,,,
 upsert,chicken,,,
 upsert,chinese cabbage,,,
@@ -14,7 +14,7 @@ upsert,feta,,,
 upsert,fish oil,,,
 upsert,greengage,,,
 exclude,gingerbread,,,
-upsert,lamb meat,usda-sr-legacy,usda_ndb,17224
+upsert,lamb meat,,,
 upsert,lime,,,
 exclude,napa cabbage,,,
 exclude,meringue,,,
@@ -23,5 +23,5 @@ upsert,paprika,ciqual,record,11049
 exclude,pizza base,,,
 upsert,rapeseed oil,,,
 upsert,soya bean,,,
-upsert,tangerine,usda-sr-legacy,usda_ndb,9218
-upsert,trout,usda-sr-legacy,usda_ndb,15240
+upsert,tangerine,,,
+upsert,trout,,,

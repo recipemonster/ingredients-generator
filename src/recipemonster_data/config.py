@@ -8,11 +8,15 @@ from urllib.parse import urlparse
 
 ALLOWED_HOSTS = {
     "entrepot.recherche.data.gouv.fr",
-    "fdc.nal.usda.gov",
-    "fineli.fi",
     "prod-espace-generique.opens3r-tls.stockage.inrae.fr",
     "raw.githubusercontent.com",
 }
+
+
+@dataclass(frozen=True)
+class VersionCheck:
+    field: str
+    value: str
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,7 @@ class Asset:
     sha256: str
     maximum_bytes: int
     manual_download: bool
+    version_check: VersionCheck
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,7 @@ def load_sources(path: Path) -> tuple[Source, ...]:
             asset_format = required_string(raw_asset, "format")
             if asset_format not in {"text", "zip", "xml"}:
                 raise ValueError(f"asset {source_id}/{asset_id} has an unsupported format")
+            version_check = load_version_check(source_id, asset_id, raw_asset.get("versionCheck"))
             assets.append(
                 Asset(
                     source_id=source_id,
@@ -89,6 +95,7 @@ def load_sources(path: Path) -> tuple[Source, ...]:
                     sha256=checksum,
                     maximum_bytes=maximum_bytes,
                     manual_download=bool(raw_asset.get("manualDownload", False)),
+                    version_check=version_check,
                 )
             )
         if not assets:
@@ -106,6 +113,15 @@ def load_sources(path: Path) -> tuple[Source, ...]:
             )
         )
     return tuple(sources)
+
+
+def load_version_check(source_id: str, asset_id: str, raw_check: object) -> VersionCheck:
+    if not isinstance(raw_check, dict):
+        raise ValueError(f"asset {source_id}/{asset_id} has no version check")
+    field = required_string(raw_check, "field")
+    if field not in {"etag", "filename", "last-modified"}:
+        raise ValueError(f"asset {source_id}/{asset_id} uses an unsupported version check field")
+    return VersionCheck(field=field, value=required_string(raw_check, "value"))
 
 
 def load_nutrient_mappings(path: Path) -> dict[tuple[str, str], str]:

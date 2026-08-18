@@ -3,9 +3,17 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import date
+from email.message import Message
 from pathlib import Path
 
-from recipemonster_data.download import update_download_lock, update_source_checksums
+from recipemonster_data.config import Asset, Source, VersionCheck
+from recipemonster_data.download import (
+    extract_asset_version,
+    merge_changed_sources,
+    update_asset_versions,
+    update_download_lock,
+    update_source_checksums,
+)
 
 
 class DownloadTest(unittest.TestCase):
@@ -57,6 +65,59 @@ class DownloadTest(unittest.TestCase):
             self.assertIn('"sourceId": "manual"', contents)
             self.assertIn('"sourceId": "automatic"', contents)
 
+    def test_updates_asset_version_without_claiming_new_dataset_content(self) -> None:
+        payload = {
+            "schemaVersion": 1,
+            "sources": [
+                {
+                    "id": "manual-source",
+                    "version": "rolling-snapshot",
+                    "assets": [
+                        {
+                            "id": "archive",
+                            "versionCheck": {"field": "filename", "value": "Dataset_Rel20.zip"},
+                        }
+                    ],
+                }
+            ],
+        }
+
+        changed = update_asset_versions(payload, {("manual-source", "archive"): "Dataset_Rel21.zip"})
+
+        self.assertEqual(changed, ("manual-source",))
+        self.assertEqual(
+            payload["sources"][0]["assets"][0]["versionCheck"]["value"],
+            "Dataset_Rel21.zip",
+        )
+        self.assertEqual(payload["sources"][0]["version"], "rolling-snapshot")
+
+    def test_combines_source_changes_once_in_detection_order(self) -> None:
+        self.assertEqual(
+            merge_changed_sources(("ciqual", "manual-source"), ("manual-source", "openfoodfacts")),
+            ("ciqual", "manual-source", "openfoodfacts"),
+        )
+
+    def test_extracts_dataset_release_from_redirect_filename(self) -> None:
+        source, asset = test_source("filename", "Dataset_Rel20.zip")
+
+        value = extract_asset_version(
+            source,
+            asset,
+            Message(),
+            "https://example.test/data/Dataset_Rel21.zip",
+        )
+
+        self.assertEqual(value, "Dataset_Rel21.zip")
+
+    def test_extracts_dataset_release_from_etag_without_reading_body(self) -> None:
+        source, asset = test_source("etag", '"old"')
+        headers = Message()
+        headers["ETag"] = '"new"'
+
+        value = extract_asset_version(source, asset, headers, asset.url)
+
+        self.assertEqual(value, '"new"')
+
 
 def checksum_result(source_id: str, asset_id: str, checksum: str) -> dict[str, object]:
     return {
@@ -66,6 +127,31 @@ def checksum_result(source_id: str, asset_id: str, checksum: str) -> dict[str, o
         "sha256": checksum,
         "bytes": 1,
     }
+
+
+def test_source(field: str, value: str) -> tuple[Source, Asset]:
+    asset = Asset(
+        source_id="manual-source",
+        asset_id="archive",
+        url="https://example.test/data",
+        file="dataset.zip",
+        format="zip",
+        sha256="",
+        maximum_bytes=10_000_000,
+        manual_download=True,
+        version_check=VersionCheck(field=field, value=value),
+    )
+    source = Source(
+        source_id="manual-source",
+        role="nutrition",
+        name="Manual source",
+        version="rolling-snapshot",
+        homepage="https://example.test",
+        attribution="THL",
+        license={"name": "test", "spdx": "test", "url": "https://example.test"},
+        assets=(asset,),
+    )
+    return source, asset
 
 
 if __name__ == "__main__":

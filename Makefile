@@ -2,7 +2,8 @@ PYTHON ?= python3
 RUN = PYTHONPATH=src $(PYTHON) -m recipemonster_data --root .
 LANGUAGES = en pl de es it
 RELEASE_DIR = dist/release
-RELEASE_SOURCES = ciqual usda-sr-legacy openfoodfacts-ingredients
+RELEASE_SOURCES = ciqual openfoodfacts-ingredients
+REFRESH_SOURCES = ciqual openfoodfacts-ingredients
 RELEASE_ARCHIVES = $(foreach language,$(LANGUAGES),$(RELEASE_DIR)/ingredients_$(language).tar.gz) $(RELEASE_DIR)/nutrition.tar.gz
 PREVIOUS_CATALOG_FLAG = $(if $(strip $(PREVIOUS_CATALOG)),--previous-catalog "$(PREVIOUS_CATALOG)",)
 PREVIEW_FLAG = $(if $(strip $(CANDIDATE_DIR)),--candidate "$(CANDIDATE_DIR)" --candidate-tag "$(CANDIDATE_TAG)" --pull-request "$(PREVIEW_NUMBER)",)
@@ -16,7 +17,7 @@ download-release:
 	$(RUN) download $(foreach source,$(RELEASE_SOURCES),--source $(source))
 
 refresh-sources:
-	$(RUN) refresh-sources
+	@$(RUN) refresh-sources $(foreach source,$(REFRESH_SOURCES),--source $(source))
 
 draft:
 	$(RUN) draft $(PREVIOUS_CATALOG_FLAG)
