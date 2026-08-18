@@ -6,4 +6,4 @@ English names define every identity. Other language files contain available tran
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE). The generated dataset is licensed under the [Open Database License 1.0](LICENCE.md). Its source contents retain their respective licenses documented in [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
+This project is licensed under the [Apache License 2.0](LICENSE). The generated dataset is licensed under the [Open Database License 1.0](LICENCE_DATASET.md). Its source contents retain their respective licenses documented in [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
