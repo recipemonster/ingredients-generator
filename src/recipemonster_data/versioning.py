@@ -64,8 +64,18 @@ def validate_new_version(candidate: Version, published: tuple[Version, ...]) -> 
         raise ValueError(f"version {candidate} must be newer than {latest}")
 
 
+def validate_release_tag(version: Version, tag: str) -> Version:
+    release = parse_version(tag)
+    if (release.major, release.minor, release.patch) != (version.major, version.minor, version.patch):
+        raise ValueError(f"tag v{release} does not match VERSION {version}")
+    return release
+
+
 def read_version_file(path: Path) -> Version:
     lines = path.read_text(encoding="utf-8").splitlines()
     if len(lines) != 1 or not lines[0].strip():
         raise ValueError("VERSION must contain exactly one semantic version")
-    return parse_version(lines[0])
+    version = parse_version(lines[0])
+    if version.candidate is not None:
+        raise ValueError("VERSION must contain a stable base version without an RC suffix")
+    return version

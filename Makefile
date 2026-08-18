@@ -7,7 +7,7 @@ RELEASE_ARCHIVES = $(foreach language,$(LANGUAGES),$(RELEASE_DIR)/ingredients_$(
 PREVIOUS_CATALOG_FLAG = $(if $(strip $(PREVIOUS_CATALOG)),--previous-catalog "$(PREVIOUS_CATALOG)",)
 PREVIEW_FLAG = $(if $(strip $(CANDIDATE_DIR)),--candidate "$(CANDIDATE_DIR)" --candidate-tag "$(CANDIDATE_TAG)" --pull-request "$(PREVIEW_NUMBER)",)
 
-.PHONY: download download-release refresh-sources draft build build-release validate test archives release-notes pages next-version latest-version validate-version release clean
+.PHONY: download download-release refresh-sources draft build build-release validate test archives release-notes pages next-version latest-version validate-version validate-release-tag release clean
 
 download:
 	$(RUN) download
@@ -62,6 +62,10 @@ latest-version:
 validate-version:
 	test -n "$(PUBLISHED_TAGS)"
 	$(RUN) validate-version --published-tags "$(PUBLISHED_TAGS)"
+
+validate-release-tag:
+	test -n "$(TAG)"
+	$(RUN) validate-release-tag --tag "$(TAG)"
 
 release: download-release
 	$(MAKE) test

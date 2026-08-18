@@ -46,11 +46,7 @@ jobs:
             echo "Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rcNUMBER" >&2
             exit 1
           fi
-          expected_tag="v$(tr -d '\n' < VERSION)"
-          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${expected_tag}" >&2
-            exit 1
-          fi
+          make validate-release-tag TAG="${GITHUB_REF_NAME}"
 
       - name: Download previous released catalog
         id: previous

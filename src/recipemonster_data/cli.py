@@ -11,7 +11,14 @@ from .config import Source, load_sources
 from .download import download_sources, refresh_sources_manifest
 from .pages import generate_pages, generate_preview
 from .validate import validate_catalog
-from .versioning import latest_version, next_patch_version, read_version_file, read_versions, validate_new_version
+from .versioning import (
+    latest_version,
+    next_patch_version,
+    read_version_file,
+    read_versions,
+    validate_new_version,
+    validate_release_tag,
+)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -53,6 +60,8 @@ def parser() -> argparse.ArgumentParser:
     latest.add_argument("--published-tags", type=Path, required=True)
     validate_version = subcommands.add_parser("validate-version", help="validate VERSION against published tags")
     validate_version.add_argument("--published-tags", type=Path, required=True)
+    validate_tag = subcommands.add_parser("validate-release-tag", help="validate a release tag against VERSION")
+    validate_tag.add_argument("--tag", required=True)
     all_command = subcommands.add_parser("all", help="download, build and validate")
     all_command.add_argument("--previous-catalog", type=Path)
     return command_parser
@@ -97,6 +106,11 @@ def main(arguments: list[str] | None = None) -> int:
             version = read_version_file(root / "VERSION")
             validate_new_version(version, read_versions(args.published_tags.resolve()))
             print(f"v{version}")
+            return 0
+        if args.command == "validate-release-tag":
+            version = read_version_file(root / "VERSION")
+            release = validate_release_tag(version, args.tag)
+            print(f"v{release}")
             return 0
         sources = load_sources(root / "sources.json")
         if args.command == "refresh-sources":
