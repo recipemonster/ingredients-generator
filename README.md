@@ -1,6 +1,7 @@
 # RecipeMonster data
 
-A generator for RecipeMonster's multilingual catalog of simple ingredients and nutrition data.
+A generator for RecipeMonster's multilingual catalog of simple ingredients and nutrition data. 
+Genereator selects simple ingredient concepts, removes preparation and product variants and adds reviewed offline translations.
 
 ```shell
 make release
@@ -9,3 +10,7 @@ make release
 This command downloads pinned sources, runs tests and validation, and builds a separate ingredient archive for each language and one nutrition archive.
 
 Source details and licenses are documented in [SOURCES.md](SOURCES.md). Exact build metadata is defined in `sources.json`.
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE). The generated dataset is licensed under the [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Its source contents retain their respective licenses documented in [SOURCES.md](SOURCES.md).

@@ -1,6 +1,6 @@
 # Data sources
 
-RecipeMonster builds a simple multilingual ingredient catalog from the sources below. Source versions are pinned in `sources.json` for reproducible releases.
+RecipeMonster builds a simple multilingual ingredient catalog from the sources below.
 
 ## Open Food Facts ingredient taxonomy
 
@@ -10,8 +10,6 @@ RecipeMonster builds a simple multilingual ingredient catalog from the sources b
 - Database license: [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/)
 - Content license: [Database Contents License 1.0](https://opendatacommons.org/licenses/dbcl/)
 - Attribution: Open Food Facts contributors
-
-RecipeMonster selects simple ingredient concepts, removes preparation and product variants, and adds reviewed offline translations.
 
 ## Anses-Ciqual
 
@@ -36,7 +34,3 @@ RecipeMonster selects simple ingredient concepts, removes preparation and produc
 - Source: [Fineli Open Data](https://fineli.fi/fineli/en/open-data)
 - License: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
 - Attribution: Finnish Institute for Health and Welfare, Fineli
-
-## Release metadata
-
-`sources.json` is the machine-readable source manifest. It contains exact versions, download locations, checksums, size limits, roles, licenses and attribution text used by the generator. `ATTRIBUTIONS.txt` records the sources actually included in a generated release.
