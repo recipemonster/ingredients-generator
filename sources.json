@@ -97,7 +97,7 @@
       "id": "openfoodfacts-ingredients",
       "role": "identity",
       "name": "Open Food Facts ingredient taxonomy",
-      "version": "2026-08-17",
+      "version": "2026-08-18",
       "homepage": "https://github.com/openfoodfacts/openfoodfacts-server/blob/main/taxonomies/food/ingredients.txt",
       "attribution": "Open Food Facts contributors. Ingredient taxonomy",
       "license": {
@@ -114,7 +114,7 @@
           "url": "https://raw.githubusercontent.com/openfoodfacts/openfoodfacts-server/main/taxonomies/food/ingredients.txt",
           "file": "openfoodfacts-ingredients.txt",
           "format": "text",
-          "sha256": "65334ae1bf5c536a792c43e67b0a6ba9750da5128d118cce162f98afc9c25264",
+          "sha256": "1406c581251cfee4f580749761f261c85c46aff060b16fda1abdc085ba5d171f",
           "maximumBytes": 8388608
         }
       ]
