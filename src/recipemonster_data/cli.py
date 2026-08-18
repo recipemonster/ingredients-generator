@@ -8,8 +8,17 @@ from pathlib import Path
 from .build import build_catalog, build_catalog_draft
 from .changelog import release_notes
 from .config import Source, load_sources
-from .download import download_sources
+from .download import download_sources, refresh_sources_manifest
+from .pages import generate_pages, generate_preview
 from .validate import validate_catalog
+from .versioning import (
+    latest_version,
+    next_patch_version,
+    read_version_file,
+    read_versions,
+    validate_new_version,
+    validate_release_tag,
+)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -26,16 +35,35 @@ def parser() -> argparse.ArgumentParser:
         metavar="SOURCE[/ASSET]=PATH",
         help="use a manually downloaded source asset",
     )
+    subcommands.add_parser("refresh-sources", help="check upstream datasets and update changed checksums")
 
     build = subcommands.add_parser("build", help="build a deterministic RecipeMonster catalog")
     build.add_argument("--source", action="append")
+    build.add_argument("--previous-catalog", type=Path)
     draft = subcommands.add_parser("draft", help="build an inspectable catalog from downloaded sources")
     draft.add_argument("--source", action="append")
+    draft.add_argument("--previous-catalog", type=Path)
     subcommands.add_parser("validate", help="validate the generated catalog and manifest")
     notes = subcommands.add_parser("release-notes", help="extract release notes from CHANGELOG.md")
     notes.add_argument("--tag", required=True)
     notes.add_argument("--output", type=Path, required=True)
-    subcommands.add_parser("all", help="download, build and validate")
+    pages = subcommands.add_parser("pages", help="generate release history pages")
+    pages.add_argument("--releases", type=Path, required=True)
+    pages.add_argument("--output", type=Path, required=True)
+    pages.add_argument("--candidate", type=Path)
+    pages.add_argument("--candidate-tag")
+    pages.add_argument("--pull-request", type=int)
+    next_version = subcommands.add_parser("next-version", help="write the next default catalog version")
+    next_version.add_argument("--published-tags", type=Path, required=True)
+    next_version.add_argument("--output", type=Path, required=True)
+    latest = subcommands.add_parser("latest-version", help="print the latest published catalog tag")
+    latest.add_argument("--published-tags", type=Path, required=True)
+    validate_version = subcommands.add_parser("validate-version", help="validate VERSION against published tags")
+    validate_version.add_argument("--published-tags", type=Path, required=True)
+    validate_tag = subcommands.add_parser("validate-release-tag", help="validate a release tag against VERSION")
+    validate_tag.add_argument("--tag", required=True)
+    all_command = subcommands.add_parser("all", help="download, build and validate")
+    all_command.add_argument("--previous-catalog", type=Path)
     return command_parser
 
 
@@ -49,7 +77,46 @@ def main(arguments: list[str] | None = None) -> int:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(notes, encoding="utf-8")
             return 0
+        if args.command == "pages":
+            generate_pages(args.releases.resolve(), args.output.resolve())
+            preview_values = (args.candidate, args.candidate_tag, args.pull_request)
+            if any(value is not None for value in preview_values):
+                if not all(value is not None for value in preview_values):
+                    raise ValueError("candidate, candidate tag and pull request must be provided together")
+                generate_preview(
+                    args.releases.resolve(),
+                    args.candidate.resolve(),
+                    args.output.resolve(),
+                    args.candidate_tag,
+                    args.pull_request,
+                )
+            return 0
+        if args.command == "next-version":
+            version = next_patch_version(read_versions(args.published_tags.resolve()))
+            args.output.resolve().write_text(f"{version}\n", encoding="utf-8")
+            print(version)
+            return 0
+        if args.command == "latest-version":
+            version = latest_version(read_versions(args.published_tags.resolve()))
+            if version is None:
+                raise ValueError("no published catalog version exists")
+            print(f"v{version}")
+            return 0
+        if args.command == "validate-version":
+            version = read_version_file(root / "VERSION")
+            validate_new_version(version, read_versions(args.published_tags.resolve()))
+            print(f"v{version}")
+            return 0
+        if args.command == "validate-release-tag":
+            version = read_version_file(root / "VERSION")
+            release = validate_release_tag(version, args.tag)
+            print(f"v{release}")
+            return 0
         sources = load_sources(root / "sources.json")
+        if args.command == "refresh-sources":
+            changed = refresh_sources_manifest(root / "sources.json", sources, root / "raw")
+            print(json.dumps({"changedSources": changed}, ensure_ascii=False, sort_keys=True))
+            return 0
         if args.command in ("download", "all"):
             selected = set(args.source or ()) if args.command == "download" else set()
             download_set = tuple(source for source in sources if not selected or source.source_id in selected)
@@ -68,6 +135,7 @@ def main(arguments: list[str] | None = None) -> int:
                 root / "raw",
                 root / "dist",
                 root / "mappings" / "nutrients.json",
+                args.previous_catalog,
             )
             print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
             if args.command == "build":
@@ -79,6 +147,7 @@ def main(arguments: list[str] | None = None) -> int:
                 root / "raw",
                 root / "dist",
                 root / "mappings" / "nutrients.json",
+                args.previous_catalog,
             )
             print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
             return 0

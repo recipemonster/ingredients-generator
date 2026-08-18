@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from decimal import Decimal
@@ -59,6 +60,7 @@ NUTRIENTS = (
     ("caffeine", "mg"),
 )
 SUPPORTED_LANGUAGES = ("en", "pl", "de", "es", "it")
+INGREDIENT_ID_PATTERN = re.compile(r"^ingredient_[0-9a-f]{32}$")
 NAME_COLUMNS = ("ingredient_id", "name")
 NUTRITION_COLUMNS = (
     "ingredient_id",
@@ -118,9 +120,10 @@ def build_catalog(
     raw_directory: Path,
     output_directory: Path,
     nutrient_mappings_path: Path,
+    previous_catalog_path: Path | None = None,
 ) -> dict[str, object]:
     verify_downloads(sources, raw_directory)
-    result = prepare_catalog(sources, raw_directory, nutrient_mappings_path)
+    result = prepare_catalog(sources, raw_directory, nutrient_mappings_path, previous_catalog_path)
     clean_output(output_directory)
     if result.unresolved:
         write_csv(output_directory / "unresolved.draft.csv", unresolved_columns(), result.unresolved)
@@ -135,9 +138,10 @@ def build_catalog_draft(
     raw_directory: Path,
     output_directory: Path,
     nutrient_mappings_path: Path,
+    previous_catalog_path: Path | None = None,
 ) -> dict[str, object]:
     verify_downloads(sources, raw_directory)
-    result = prepare_catalog(sources, raw_directory, nutrient_mappings_path)
+    result = prepare_catalog(sources, raw_directory, nutrient_mappings_path, previous_catalog_path)
     clean_output(output_directory)
     write_catalog_files(output_directory, result.ingredients, draft=True)
     write_release_documents(output_directory)
@@ -150,6 +154,7 @@ def prepare_catalog(
     sources: tuple[Source, ...],
     raw_directory: Path,
     nutrient_mappings_path: Path,
+    previous_catalog_path: Path | None,
 ) -> BuildResult:
     identity_sources = [source for source in sources if source.role == "identity"]
     if len(identity_sources) != 1:
@@ -161,6 +166,7 @@ def prepare_catalog(
         for ingredient in mapped_base_ingredients(taxonomy)
     }
     apply_ingredient_overrides(ingredients, nutrient_mappings_path.parent / "ingredients.csv")
+    ingredient_ids = assign_ingredient_ids(ingredients, load_previous_ingredient_ids(previous_catalog_path))
     for language in SUPPORTED_LANGUAGES:
         apply_name_mappings(ingredients, nutrient_mappings_path.parent / f"names_{language}.csv", language)
     records, ndb_to_fdc = read_nutrition_sources(sources, raw_directory, nutrient_mappings_path)
@@ -178,7 +184,7 @@ def prepare_catalog(
                 }
             )
             continue
-        catalog_ingredients.append(catalog_ingredient(ingredient, record))
+        catalog_ingredients.append(catalog_ingredient(ingredient, record, ingredient_ids[ingredient.key]))
         used_sources.add(record.dataset)
     selected_sources = tuple(source for source in sources if source.source_id in used_sources)
     return BuildResult(
@@ -316,6 +322,49 @@ def apply_ingredient_overrides(ingredients: dict[str, TaxonomyIngredient], path:
             )
 
 
+def load_previous_ingredient_ids(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    with path.open(encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+        if tuple(reader.fieldnames or ()) != NUTRITION_COLUMNS:
+            raise ValueError("previous nutrition catalog has an invalid header")
+        ingredient_ids: dict[str, str] = {}
+        used_ids: dict[str, str] = {}
+        for row in reader:
+            key = row["taxonomy_key"].strip()
+            ingredient_id = row["ingredient_id"].strip()
+            if not key or INGREDIENT_ID_PATTERN.fullmatch(ingredient_id) is None:
+                raise ValueError("previous nutrition catalog has an invalid ingredient identity")
+            if key in ingredient_ids:
+                raise ValueError(f"previous nutrition catalog contains duplicate taxonomy key: {key}")
+            existing_key = used_ids.get(ingredient_id)
+            if existing_key is not None:
+                raise ValueError(f"previous ingredient ID {ingredient_id} is used by {existing_key} and {key}")
+            ingredient_ids[key] = ingredient_id
+            used_ids[ingredient_id] = key
+        return ingredient_ids
+
+
+def assign_ingredient_ids(
+    ingredients: dict[str, TaxonomyIngredient],
+    previous_ids: dict[str, str],
+) -> dict[str, str]:
+    missing = sorted(set(previous_ids) - set(ingredients))
+    if missing:
+        preview = ", ".join(missing[:10])
+        if len(missing) > 10:
+            preview += f", and {len(missing) - 10} more"
+        raise ValueError(f"previously released ingredients disappeared: {preview}")
+    assigned = {
+        key: previous_ids.get(key, stable_id("ingredient", key))
+        for key in ingredients
+    }
+    if len(set(assigned.values())) != len(assigned):
+        raise ValueError("ingredient ID collision")
+    return assigned
+
+
 def nutrition_property(dataset: str, id_type: str) -> str:
     if dataset == "ciqual" and id_type == "record":
         return "ciqual_food_code"
@@ -360,7 +409,11 @@ def split_names(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split("|") if part.strip())
 
 
-def catalog_ingredient(ingredient, record: NutritionRecord) -> CatalogIngredient:
+def catalog_ingredient(
+    ingredient: TaxonomyIngredient,
+    record: NutritionRecord,
+    ingredient_id: str,
+) -> CatalogIngredient:
     names: dict[str, tuple[str, ...]] = {}
     for language in SUPPORTED_LANGUAGES:
         values = localized_names(ingredient, language)
@@ -369,7 +422,6 @@ def catalog_ingredient(ingredient, record: NutritionRecord) -> CatalogIngredient
     missing_languages = [language for language in SUPPORTED_LANGUAGES if not names.get(language)]
     if missing_languages:
         raise ValueError(f"ingredient {ingredient.key} has no names for: {', '.join(missing_languages)}")
-    ingredient_id = stable_id("ingredient", ingredient.key)
     nutrition = {column: "" for column in NUTRITION_COLUMNS}
     nutrition.update(
         {

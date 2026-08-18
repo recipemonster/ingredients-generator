@@ -1,0 +1,176 @@
+name: Refresh upstream datasets
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dataset-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Check and propose updates
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+      pull_request: ${{ steps.pull_request.outputs['pull-request-number'] }}
+      candidate_tag: ${{ steps.candidate.outputs.tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read published versions
+        id: releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tags_file="${RUNNER_TEMP}/published-tags.txt"
+          gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' > "${tags_file}"
+          base_tag=$(PYTHONPATH=src python3 -m recipemonster_data --root . latest-version --published-tags "${tags_file}")
+          mkdir -p .release-base
+          gh release download "${base_tag}" --pattern nutrition.tar.gz --dir .release-base
+          tar -xzf .release-base/nutrition.tar.gz -C .release-base nutrition.csv
+          echo "tags_file=${tags_file}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check upstream datasets
+        run: make refresh-sources
+
+      - name: Detect source changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- sources.json; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Select candidate version
+        id: candidate
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          make next-version PUBLISHED_TAGS="${{ steps.releases.outputs.tags_file }}"
+          echo "tag=v$(tr -d '\n' < VERSION)" >> "${GITHUB_OUTPUT}"
+
+      - name: Test and build candidate
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          make test
+          make build-release PREVIOUS_CATALOG=.release-base/nutrition.csv
+          make validate
+
+      - name: Create or update pull request
+        id: pull_request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ github.token }}
+          branch: automation/dataset-refresh
+          delete-branch: true
+          commit-message: update upstream dataset snapshots
+          title: Update upstream dataset snapshots
+          body: |
+            Automated upstream dataset refresh.
+
+            Tests and a complete candidate catalog build passed. A detailed dataset diff will be linked in a PR comment.
+          add-paths: |
+            sources.json
+            VERSION
+
+      - name: Upload candidate catalog
+        if: steps.pull_request.outputs['pull-request-number'] != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: candidate-catalog
+          path: dist/*.csv
+          if-no-files-found: error
+          retention-days: 1
+
+  preview:
+    name: Publish pull request diff
+    needs: refresh
+    if: needs.refresh.outputs.pull_request != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Download candidate catalog
+        uses: actions/download-artifact@v8
+        with:
+          name: candidate-catalog
+          path: .candidate
+
+      - name: Download release history
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .release-history
+          gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+            if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
+              continue
+            fi
+            directory=".release-history/${tag}"
+            mkdir -p "${directory}"
+            gh release download "${tag}" --pattern '*.tar.gz' --dir "${directory}"
+            for archive in "${directory}"/*.tar.gz; do
+              tar -xzf "${archive}" -C "${directory}"
+            done
+          done
+
+      - name: Generate release history and candidate diff
+        run: |
+          make pages RELEASES_DIR=.release-history CANDIDATE_DIR=.candidate CANDIDATE_TAG="${{ needs.refresh.outputs.candidate_tag }}" PREVIEW_NUMBER="${{ needs.refresh.outputs.pull_request }}"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist/pages
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+      - name: Link preview from pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base_url="${{ steps.deployment.outputs.page_url }}"
+          preview_url="${base_url%/}/previews/pr-${{ needs.refresh.outputs.pull_request }}/"
+          gh pr comment "${{ needs.refresh.outputs.pull_request }}" --edit-last --create-if-none --body "Dataset diff: ${preview_url}"
