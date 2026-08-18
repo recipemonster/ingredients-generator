@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$")
+TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$")
+RELEASE_HEADING_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ def parse_changelog(text: str) -> tuple[ReleaseSection, ...]:
             if unreleased_seen or sections:
                 raise ValueError("Unreleased must occur once before all releases")
             unreleased_seen = True
-        elif TAG_PATTERN.fullmatch(current_tag) is None:
+        elif RELEASE_HEADING_PATTERN.fullmatch(current_tag) is None:
             raise ValueError(f"invalid changelog release heading: {current_tag}")
     if current_tag:
         sections.append(release_section(current_tag, current_lines))
@@ -44,12 +45,17 @@ def parse_changelog(text: str) -> tuple[ReleaseSection, ...]:
 
 
 def release_notes(text: str, tag: str) -> str:
-    if TAG_PATTERN.fullmatch(tag) is None:
+    match = TAG_PATTERN.fullmatch(tag)
+    if match is None:
         raise ValueError(f"invalid release tag: {tag}")
-    for section in parse_changelog(text):
-        if section.tag == tag:
-            return section.notes + "\n"
-    raise ValueError(f"CHANGELOG.md has no section for {tag}")
+    major, minor, patch, _ = match.groups()
+    release_tag = f"v{major}.{minor}.{patch}"
+    sections = {section.tag: section.notes for section in parse_changelog(text)}
+    if notes := sections.get(release_tag):
+        return notes + "\n"
+    if notes := sections.get("Unreleased"):
+        return notes + "\n"
+    raise ValueError(f"CHANGELOG.md has no section for {release_tag} or Unreleased")
 
 
 def release_section(tag: str, lines: list[str]) -> ReleaseSection:
@@ -59,9 +65,9 @@ def release_section(tag: str, lines: list[str]) -> ReleaseSection:
     return ReleaseSection(tag=tag, notes=notes)
 
 
-def tag_order(tag: str) -> tuple[int, int, int, int, int]:
-    match = TAG_PATTERN.fullmatch(tag)
+def tag_order(tag: str) -> tuple[int, int, int]:
+    match = RELEASE_HEADING_PATTERN.fullmatch(tag)
     if match is None:
         raise ValueError(f"invalid release tag: {tag}")
-    major, minor, patch, candidate = match.groups()
-    return int(major), int(minor), int(patch), int(candidate is None), int(candidate or 0)
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch)

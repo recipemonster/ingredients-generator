@@ -41,8 +41,8 @@ jobs:
       - name: Validate release tag
         shell: bash
         run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
-            echo "Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.NUMBER" >&2
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
+            echo "Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rcNUMBER" >&2
             exit 1
           fi
 
@@ -62,7 +62,7 @@ jobs:
             exit 0
           fi
           options=(--verify-tag --notes-file "${notes_file}" --title "${GITHUB_REF_NAME}")
-          if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then
+          if [[ "${GITHUB_REF_NAME}" == *-rc* ]]; then
             options+=(--prerelease)
           fi
           gh release create "${GITHUB_REF_NAME}" "${assets[@]}" "${options[@]}"
