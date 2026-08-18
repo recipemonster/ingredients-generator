@@ -136,12 +136,12 @@ class PipelineTest(unittest.TestCase):
                 "# Test attributions\n",
             )
             self.assertEqual(
-                (root / "dist" / "LICENCE.md").read_text(encoding="utf-8"),
+                (root / "dist" / "LICENCE_DATASET.md").read_text(encoding="utf-8"),
                 "# Test ODbL license\n",
             )
             generated_files = (
                 "ATTRIBUTIONS.md",
-                "LICENCE.md",
+                "LICENCE_DATASET.md",
                 "nutrition.csv",
                 *(f"ingredients_{language}.csv" for language in SUPPORTED_LANGUAGES),
             )
@@ -369,7 +369,7 @@ def create_ciqual_files(directory: Path) -> None:
 
 def create_nutrient_mappings(root: Path) -> Path:
     (root / "ATTRIBUTIONS.md").write_text("# Test attributions\n", encoding="utf-8")
-    (root / "LICENCE.md").write_text("# Test ODbL license\n", encoding="utf-8")
+    (root / "LICENCE_DATASET.md").write_text("# Test ODbL license\n", encoding="utf-8")
     path = root / "nutrients.json"
     path.write_text(
         json.dumps(

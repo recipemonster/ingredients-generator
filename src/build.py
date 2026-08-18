@@ -70,7 +70,7 @@ NUTRITION_COLUMNS = (
 )
 GENERATED_FILENAMES = (
     "ATTRIBUTIONS.md",
-    "LICENCE.md",
+    "LICENCE_DATASET.md",
     "ambiguous_merges.draft.csv",
     "catalog.draft.csv",
     "catalog_assets.draft.csv",
@@ -505,7 +505,7 @@ def write_csv(path: Path, columns: tuple[str, ...], rows) -> None:
 
 
 def write_release_documents(output_directory: Path) -> None:
-    for filename in ("ATTRIBUTIONS.md", "LICENCE.md"):
+    for filename in ("ATTRIBUTIONS.md", "LICENCE_DATASET.md"):
         source = output_directory.parent / filename
         if not source.is_file():
             raise ValueError(f"{filename} is missing")
