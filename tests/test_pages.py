@@ -37,6 +37,28 @@ class PagesTest(unittest.TestCase):
             self.assertIn("Apple &amp; pear", release)
             self.assertNotIn("Apple & pear", release)
 
+    def test_initial_release_does_not_generate_a_full_catalog_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            releases = root / "releases"
+            write_release(
+                releases / "v0.1.0-rc1",
+                {
+                    "ingredient_a": ("apple", "Apple", "52"),
+                    "ingredient_b": ("potato", "Potato", "77"),
+                },
+            )
+
+            generate_pages(releases, root / "site")
+
+            index = (root / "site" / "index.html").read_text(encoding="utf-8")
+            release = (root / "site" / "releases" / "v0.1.0-rc1.html").read_text(encoding="utf-8")
+            self.assertIn("Initial release, no diff", index)
+            self.assertIn("No previous version to compare", release)
+            self.assertNotIn("ingredient_a", release)
+            self.assertNotIn("Added ingredients", release)
+            self.assertNotIn("Nutrition changes", release)
+
     def test_generates_pull_request_preview_against_latest_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

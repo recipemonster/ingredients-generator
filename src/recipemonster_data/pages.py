@@ -18,6 +18,7 @@ class ReleaseCatalog:
 
 @dataclass(frozen=True)
 class ReleaseDiff:
+    has_previous: bool
     added: tuple[str, ...]
     removed: tuple[str, ...]
     identity_changes: tuple[tuple[str, str, str], ...]
@@ -113,7 +114,8 @@ def release_order(tag: str) -> tuple[int, int, int, int, int]:
 def compare_releases(previous: ReleaseCatalog | None, current: ReleaseCatalog) -> ReleaseDiff:
     if previous is None:
         return ReleaseDiff(
-            added=tuple(sorted(current.nutrition)),
+            has_previous=False,
+            added=(),
             removed=(),
             identity_changes=(),
             name_changes=(),
@@ -144,6 +146,7 @@ def compare_releases(previous: ReleaseCatalog | None, current: ReleaseCatalog) -
             if field not in ignored and before[field] != after[field]:
                 nutrition_changes.append((ingredient_id, field, before[field], after[field]))
     return ReleaseDiff(
+        has_previous=True,
         added=tuple(sorted(current_ids - previous_ids)),
         removed=tuple(sorted(previous_ids - current_ids)),
         identity_changes=identity_changes,
@@ -153,13 +156,7 @@ def compare_releases(previous: ReleaseCatalog | None, current: ReleaseCatalog) -
 
 
 def index_page(summaries: tuple[tuple[ReleaseCatalog, ReleaseDiff], ...]) -> str:
-    rows = "".join(
-        f"<tr><td><a href=\"releases/{escape(catalog.tag)}.html\">{escape(catalog.tag)}</a></td>"
-        f"<td>{len(catalog.nutrition)}</td><td class=\"positive\">+{len(diff.added)}</td>"
-        f"<td class=\"negative\">-{len(diff.removed)}</td><td>{len(diff.name_changes)}</td>"
-        f"<td>{len(diff.nutrition_changes)}</td></tr>"
-        for catalog, diff in summaries
-    )
+    rows = "".join(index_row(catalog, diff) for catalog, diff in summaries)
     body = (
         "<header><p class=\"eyebrow\">RecipeMonster data</p><h1>Ingredient catalog releases</h1>"
         "<p>Version history generated from published release artifacts.</p></header>"
@@ -170,6 +167,21 @@ def index_page(summaries: tuple[tuple[ReleaseCatalog, ReleaseDiff], ...]) -> str
     return document("Ingredient catalog releases", body)
 
 
+def index_row(catalog: ReleaseCatalog, diff: ReleaseDiff) -> str:
+    prefix = (
+        f"<tr><td><a href=\"releases/{escape(catalog.tag)}.html\">{escape(catalog.tag)}</a></td>"
+        f"<td>{len(catalog.nutrition)}</td>"
+    )
+    if not diff.has_previous:
+        return prefix + '<td colspan="4" class="empty">Initial release, no diff</td></tr>'
+    return (
+        prefix
+        + f"<td class=\"positive\">+{len(diff.added)}</td>"
+        + f"<td class=\"negative\">-{len(diff.removed)}</td><td>{len(diff.name_changes)}</td>"
+        + f"<td>{len(diff.nutrition_changes)}</td></tr>"
+    )
+
+
 def release_page(
     current: ReleaseCatalog,
     previous: ReleaseCatalog | None,
@@ -177,7 +189,15 @@ def release_page(
     index_href: str = "../index.html",
     eyebrow: str = "Release diff",
 ) -> str:
-    previous_label = previous.tag if previous else "initial release"
+    if previous is None:
+        body = (
+            f"<nav><a href=\"{escape(index_href)}\">All releases</a></nav>"
+            f"<header><p class=\"eyebrow\">Initial release</p><h1>{escape(current.tag)}</h1>"
+            "<p>No previous version to compare.</p></header>"
+            f"<main><section class=\"summary initial\">{summary_card('Ingredients', len(current.nutrition), 'Total in this version')}</section></main>"
+        )
+        return document(f"{current.tag} release", body)
+    previous_label = previous.tag
     cards = (
         summary_card("Ingredients", len(current.nutrition), "Total in this version")
         + summary_card("Added", len(diff.added), f"Compared with {previous_label}")
@@ -226,5 +246,5 @@ def document(title: str, body: str) -> str:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{escape(title)}</title><style>
 :root{{--bg:#ecfeff;--surface:#fff;--text:#164e63;--muted:#475569;--line:#bae6fd;--primary:#0e7490;--good:#166534;--bad:#991b1b}}
-*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}}header,main,nav{{width:min(1180px,calc(100% - 32px));margin:auto}}nav{{padding-top:24px}}a{{color:var(--primary);font-weight:700}}a:focus-visible{{outline:3px solid #22c55e;outline-offset:3px}}header{{padding:52px 0 28px}}h1{{font-size:clamp(2rem,6vw,4.5rem);line-height:1;margin:.2em 0}}h2{{font-size:1.15rem;margin:0 0 18px}}.eyebrow{{font:700 .78rem ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}}main{{padding-bottom:64px}}.panel,.summary article{{background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(14,116,144,.08)}}.panel{{margin:16px 0;padding:20px;border-radius:12px}}.summary{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}}.summary article{{padding:18px;border-radius:10px}}.summary span,.summary small{{display:block;color:var(--muted)}}.summary strong{{display:block;font:700 2rem ui-monospace,monospace;margin:4px 0}}.count{{display:inline-block;padding:2px 8px;border-radius:999px;background:#cffafe;font:600 .8rem ui-monospace,monospace}}.table-wrap{{overflow:auto}}table{{width:100%;border-collapse:collapse;min-width:680px}}th,td{{padding:11px 12px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}}th{{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}td{{font-family:ui-monospace,monospace;font-size:.86rem}}tbody tr:hover{{background:#f0fdfa}}.positive{{color:var(--good)}}.negative{{color:var(--bad)}}.empty,.empty-state{{color:var(--muted);font-style:italic}}.empty-state{{text-align:center;padding:28px}}@media(max-width:760px){{header{{padding-top:32px}}.summary{{grid-template-columns:1fr 1fr}}.panel{{padding:14px}}}}@media(max-width:420px){{.summary{{grid-template-columns:1fr}}}}@media(prefers-reduced-motion:reduce){{*{{scroll-behavior:auto!important}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}}header,main,nav{{width:min(1180px,calc(100% - 32px));margin:auto}}nav{{padding-top:24px}}a{{color:var(--primary);font-weight:700}}a:focus-visible{{outline:3px solid #22c55e;outline-offset:3px}}header{{padding:52px 0 28px}}h1{{font-size:clamp(2rem,6vw,4.5rem);line-height:1;margin:.2em 0}}h2{{font-size:1.15rem;margin:0 0 18px}}.eyebrow{{font:700 .78rem ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}}main{{padding-bottom:64px}}.panel,.summary article{{background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(14,116,144,.08)}}.panel{{margin:16px 0;padding:20px;border-radius:12px}}.summary{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}}.summary.initial{{grid-template-columns:minmax(0,280px)}}.summary article{{padding:18px;border-radius:10px}}.summary span,.summary small{{display:block;color:var(--muted)}}.summary strong{{display:block;font:700 2rem ui-monospace,monospace;margin:4px 0}}.count{{display:inline-block;padding:2px 8px;border-radius:999px;background:#cffafe;font:600 .8rem ui-monospace,monospace}}.table-wrap{{overflow:auto}}table{{width:100%;border-collapse:collapse;min-width:680px}}th,td{{padding:11px 12px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}}th{{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}}td{{font-family:ui-monospace,monospace;font-size:.86rem}}tbody tr:hover{{background:#f0fdfa}}.positive{{color:var(--good)}}.negative{{color:var(--bad)}}.empty,.empty-state{{color:var(--muted);font-style:italic}}.empty-state{{text-align:center;padding:28px}}@media(max-width:760px){{header{{padding-top:32px}}.summary{{grid-template-columns:1fr 1fr}}.summary.initial{{grid-template-columns:minmax(0,280px)}}.panel{{padding:14px}}}}@media(max-width:420px){{.summary,.summary.initial{{grid-template-columns:1fr}}}}@media(prefers-reduced-motion:reduce){{*{{scroll-behavior:auto!important}}}}
 </style></head><body>{body}</body></html>"""
