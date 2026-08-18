@@ -32,10 +32,10 @@ archives:
 	mkdir -p $(RELEASE_DIR)
 	rm -f $(RELEASE_ARCHIVES)
 	@set -eu; for language in $(LANGUAGES); do \
-		tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 --numeric-owner -C dist -cf "$(RELEASE_DIR)/ingredients_$${language}.tar" "ingredients_$${language}.csv" ATTRIBUTIONS.txt SOURCES.md; \
+		tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 --numeric-owner -C dist -cf "$(RELEASE_DIR)/ingredients_$${language}.tar" "ingredients_$${language}.csv" ATTRIBUTIONS.md LICENCE.md; \
 		gzip -n -9 "$(RELEASE_DIR)/ingredients_$${language}.tar"; \
 	done
-	tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 --numeric-owner -C dist -cf $(RELEASE_DIR)/nutrition.tar nutrition.csv ATTRIBUTIONS.txt SOURCES.md
+	tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 --numeric-owner -C dist -cf $(RELEASE_DIR)/nutrition.tar nutrition.csv ATTRIBUTIONS.md LICENCE.md
 	gzip -n -9 $(RELEASE_DIR)/nutrition.tar
 
 release-notes:

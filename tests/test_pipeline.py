@@ -115,16 +115,17 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual({row["name"] for row in english}, {"apple", "potato"})
             self.assertEqual({row["name"] for row in polish}, {"jabłko", "ziemniak"})
             self.assertNotIn("cooked potato", {row["name"] for row in english})
-            attributions = (root / "dist" / "ATTRIBUTIONS.txt").read_text(encoding="utf-8")
-            self.assertIn("Database license: Open Database License 1.0", attributions)
-            self.assertIn("License: test (LicenseRef-Test)", attributions)
             self.assertEqual(
-                (root / "dist" / "SOURCES.md").read_text(encoding="utf-8"),
-                "# Test sources\n",
+                (root / "dist" / "ATTRIBUTIONS.md").read_text(encoding="utf-8"),
+                "# Test attributions\n",
+            )
+            self.assertEqual(
+                (root / "dist" / "LICENCE.md").read_text(encoding="utf-8"),
+                "# Test ODbL license\n",
             )
             generated_files = (
-                "ATTRIBUTIONS.txt",
-                "SOURCES.md",
+                "ATTRIBUTIONS.md",
+                "LICENCE.md",
                 "nutrition.csv",
                 *(f"ingredients_{language}.csv" for language in SUPPORTED_LANGUAGES),
             )
@@ -296,7 +297,8 @@ def create_ciqual_files(directory: Path) -> None:
 
 
 def create_nutrient_mappings(root: Path) -> Path:
-    (root / "SOURCES.md").write_text("# Test sources\n", encoding="utf-8")
+    (root / "ATTRIBUTIONS.md").write_text("# Test attributions\n", encoding="utf-8")
+    (root / "LICENCE.md").write_text("# Test ODbL license\n", encoding="utf-8")
     path = root / "nutrients.json"
     path.write_text(
         json.dumps(

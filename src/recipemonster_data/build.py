@@ -71,8 +71,8 @@ NUTRITION_COLUMNS = (
     *(f"{key}_{unit}" for key, unit in NUTRIENTS),
 )
 GENERATED_FILENAMES = (
-    "ATTRIBUTIONS.txt",
-    "SOURCES.md",
+    "ATTRIBUTIONS.md",
+    "LICENCE.md",
     "ambiguous_merges.draft.csv",
     "catalog.draft.csv",
     "catalog_assets.draft.csv",
@@ -126,8 +126,7 @@ def build_catalog(
         write_csv(output_directory / "unresolved.draft.csv", unresolved_columns(), result.unresolved)
         raise ValueError(f"nutrition could not be resolved for {len(result.unresolved)} ingredients")
     write_catalog_files(output_directory, result.ingredients, draft=False)
-    write_attributions(output_directory, result.sources)
-    write_sources(output_directory)
+    write_release_documents(output_directory)
     return manifest(result, release_eligible=True)
 
 
@@ -141,8 +140,7 @@ def build_catalog_draft(
     result = prepare_catalog(sources, raw_directory, nutrient_mappings_path)
     clean_output(output_directory)
     write_catalog_files(output_directory, result.ingredients, draft=True)
-    write_attributions(output_directory, result.sources)
-    write_sources(output_directory)
+    write_release_documents(output_directory)
     if result.unresolved:
         write_csv(output_directory / "unresolved.draft.csv", unresolved_columns(), result.unresolved)
     return manifest(result, release_eligible=False)
@@ -440,45 +438,14 @@ def write_csv(path: Path, columns: tuple[str, ...], rows) -> None:
         Path(temporary_name).unlink(missing_ok=True)
 
 
-def write_attributions(output_directory: Path, sources: tuple[Source, ...]) -> None:
-    sections = [
-        "RecipeMonster generated ingredient catalog",
-        "",
-        "Database license: Open Database License 1.0",
-        "https://opendatacommons.org/licenses/odbl/1-0/",
-        "",
-    ]
-    for source in sources:
-        license_data = source.license
-        sections.extend(
-            (
-                source.name,
-                f"Version: {source.version}",
-                f"Source: {source.homepage}",
-                f"Attribution: {source.attribution}",
-                f"License: {license_data['name']} ({license_data['spdx']})",
-                f"License URL: {license_data['url']}",
-            )
-        )
-        if content_name := license_data.get("contentName"):
-            sections.extend(
-                (
-                    f"Content license: {content_name} ({license_data['contentSpdx']})",
-                    f"Content license URL: {license_data['contentUrl']}",
-                )
-            )
-        sections.append("")
-    text = "\n".join(sections).rstrip() + "\n"
-    (output_directory / "ATTRIBUTIONS.txt").write_text(text, encoding="utf-8")
-
-
-def write_sources(output_directory: Path) -> None:
-    source = output_directory.parent / "SOURCES.md"
-    if not source.is_file():
-        raise ValueError("SOURCES.md is missing")
-    destination = output_directory / "SOURCES.md"
-    destination.write_bytes(source.read_bytes())
-    destination.chmod(0o644)
+def write_release_documents(output_directory: Path) -> None:
+    for filename in ("ATTRIBUTIONS.md", "LICENCE.md"):
+        source = output_directory.parent / filename
+        if not source.is_file():
+            raise ValueError(f"{filename} is missing")
+        destination = output_directory / filename
+        destination.write_bytes(source.read_bytes())
+        destination.chmod(0o644)
 
 
 def write_catalog_files(
