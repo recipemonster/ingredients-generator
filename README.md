@@ -1,4 +1,4 @@
-# RecipeMonster data
+# RecipeMonster ingredients generator
 
 A generator for RecipeMonster's multilingual catalog of simple ingredients and nutrition data. 
 Genereator selects simple ingredient concepts, removes preparation and product variants and adds reviewed offline translations.
