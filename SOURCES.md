@@ -2,6 +2,10 @@
 
 RecipeMonster builds a simple multilingual ingredient catalog from the sources below.
 
+## Generated dataset
+
+The generated RecipeMonster dataset is licensed under the [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Source contents retain the licenses listed below. RecipeMonster selects, simplifies, translates and links source data. The original data providers do not endorse RecipeMonster.
+
 ## Open Food Facts ingredient taxonomy
 
 - Purpose: ingredient identities and multilingual names

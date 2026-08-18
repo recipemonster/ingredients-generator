@@ -119,16 +119,11 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("Database license: Open Database License 1.0", attributions)
             self.assertIn("License: test (LicenseRef-Test)", attributions)
             self.assertEqual(
-                (root / "dist" / "DATA_LICENSE.md").read_text(encoding="utf-8"),
-                "# Test data license\n",
-            )
-            self.assertEqual(
                 (root / "dist" / "SOURCES.md").read_text(encoding="utf-8"),
                 "# Test sources\n",
             )
             generated_files = (
                 "ATTRIBUTIONS.txt",
-                "DATA_LICENSE.md",
                 "SOURCES.md",
                 "nutrition.csv",
                 *(f"ingredients_{language}.csv" for language in SUPPORTED_LANGUAGES),
@@ -301,7 +296,6 @@ def create_ciqual_files(directory: Path) -> None:
 
 
 def create_nutrient_mappings(root: Path) -> Path:
-    (root / "DATA_LICENSE.md").write_text("# Test data license\n", encoding="utf-8")
     (root / "SOURCES.md").write_text("# Test sources\n", encoding="utf-8")
     path = root / "nutrients.json"
     path.write_text(
