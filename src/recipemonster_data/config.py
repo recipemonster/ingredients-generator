@@ -12,6 +12,7 @@ ALLOWED_HOSTS = {
     "fineli.fi",
     "prod-espace-generique.opens3r-tls.stockage.inrae.fr",
     "raw.githubusercontent.com",
+    "www.suomi.fi",
 }
 
 
@@ -28,6 +29,14 @@ class Asset:
 
 
 @dataclass(frozen=True)
+class UpdateProbe:
+    url: str
+    pattern: str
+    value: str
+    maximum_bytes: int
+
+
+@dataclass(frozen=True)
 class Source:
     source_id: str
     role: str
@@ -37,6 +46,7 @@ class Source:
     attribution: str
     license: dict[str, str]
     assets: tuple[Asset, ...]
+    update_probe: UpdateProbe | None = None
 
 
 def load_sources(path: Path) -> tuple[Source, ...]:
@@ -93,6 +103,7 @@ def load_sources(path: Path) -> tuple[Source, ...]:
             )
         if not assets:
             raise ValueError(f"source {source_id} has no assets")
+        update_probe = load_update_probe(source_id, raw_source.get("updateProbe"))
         sources.append(
             Source(
                 source_id=source_id,
@@ -103,9 +114,30 @@ def load_sources(path: Path) -> tuple[Source, ...]:
                 attribution=required_string(raw_source, "attribution"),
                 license={key: str(value) for key, value in license_data.items()},
                 assets=tuple(assets),
+                update_probe=update_probe,
             )
         )
     return tuple(sources)
+
+
+def load_update_probe(source_id: str, raw_probe: object) -> UpdateProbe | None:
+    if raw_probe is None:
+        return None
+    if not isinstance(raw_probe, dict):
+        raise ValueError(f"source {source_id} has an invalid update probe")
+    url = required_string(raw_probe, "url")
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS or parsed.username or parsed.port:
+        raise ValueError(f"source {source_id} update probe uses an unapproved URL")
+    maximum_bytes = int(raw_probe.get("maximumBytes", 0))
+    if maximum_bytes <= 0:
+        raise ValueError(f"source {source_id} update probe has no size limit")
+    return UpdateProbe(
+        url=url,
+        pattern=required_string(raw_probe, "pattern"),
+        value=required_string(raw_probe, "value"),
+        maximum_bytes=maximum_bytes,
+    )
 
 
 def load_nutrient_mappings(path: Path) -> dict[tuple[str, str], str]:

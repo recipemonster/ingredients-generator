@@ -3,15 +3,29 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 import zipfile
 from datetime import date
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .config import ALLOWED_HOSTS, Asset, Source
+from .config import ALLOWED_HOSTS, Asset, Source, UpdateProbe
+
+
+class TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+    def text(self) -> str:
+        return " ".join(" ".join(self.parts).split())
 
 
 class SafeRedirectHandler(HTTPRedirectHandler):
@@ -97,7 +111,10 @@ def refresh_sources_manifest(
 ) -> tuple[str, ...]:
     raw_directory.mkdir(parents=True, exist_ok=True)
     observed: dict[tuple[str, str], dict[str, object]] = {}
+    observed_probes: dict[str, str] = {}
     for source in sources:
+        if source.update_probe is not None:
+            observed_probes[source.source_id] = acquire_update_probe(source.source_id, source.update_probe)
         for asset in source.assets:
             if asset.manual_download:
                 continue
@@ -110,10 +127,55 @@ def refresh_sources_manifest(
             )
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     changed_sources = update_source_checksums(payload, observed, snapshot_date or date.today())
+    changed_sources = merge_changed_sources(changed_sources, update_source_probes(payload, observed_probes))
     if changed_sources:
         manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     update_download_lock(raw_directory / "download-lock.json", observed)
     return changed_sources
+
+
+def acquire_update_probe(source_id: str, probe: UpdateProbe) -> str:
+    request = Request(
+        probe.url,
+        headers={
+            "Accept": "text/html,application/xhtml+xml",
+            "User-Agent": "RecipeMonster data builder",
+        },
+    )
+    with build_opener(SafeRedirectHandler()).open(request, timeout=60) as response:
+        content_length = int(response.headers.get("Content-Length", "0") or 0)
+        if content_length > probe.maximum_bytes:
+            raise ValueError(f"update probe for {source_id} exceeds its size limit")
+        body = response.read(probe.maximum_bytes + 1)
+    if len(body) > probe.maximum_bytes:
+        raise ValueError(f"update probe for {source_id} exceeds its size limit")
+    return extract_probe_value(source_id, probe, body)
+
+
+def extract_probe_value(source_id: str, probe: UpdateProbe, body: bytes) -> str:
+    extractor = TextExtractor()
+    extractor.feed(body.decode("utf-8", errors="replace"))
+    match = re.search(probe.pattern, extractor.text())
+    if match is None or match.lastindex != 1:
+        raise ValueError(f"update probe for {source_id} did not return one version value")
+    return match.group(1)
+
+
+def update_source_probes(payload: dict[str, object], observed: dict[str, str]) -> tuple[str, ...]:
+    changed_sources: list[str] = []
+    for source in payload.get("sources", []):
+        source_id = str(source.get("id", ""))
+        value = observed.get(source_id)
+        probe = source.get("updateProbe")
+        if value is None or not isinstance(probe, dict) or probe.get("value") == value:
+            continue
+        probe["value"] = value
+        changed_sources.append(source_id)
+    return tuple(changed_sources)
+
+
+def merge_changed_sources(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(source_id for group in groups for source_id in group))
 
 
 def update_source_checksums(

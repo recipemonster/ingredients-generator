@@ -5,7 +5,14 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from recipemonster_data.download import update_download_lock, update_source_checksums
+from recipemonster_data.config import UpdateProbe
+from recipemonster_data.download import (
+    extract_probe_value,
+    merge_changed_sources,
+    update_download_lock,
+    update_source_checksums,
+    update_source_probes,
+)
 
 
 class DownloadTest(unittest.TestCase):
@@ -56,6 +63,46 @@ class DownloadTest(unittest.TestCase):
             contents = path.read_text(encoding="utf-8")
             self.assertIn('"sourceId": "manual"', contents)
             self.assertIn('"sourceId": "automatic"', contents)
+
+    def test_updates_manual_source_probe_without_claiming_new_dataset_version(self) -> None:
+        payload = {
+            "schemaVersion": 1,
+            "sources": [
+                {
+                    "id": "fineli",
+                    "version": "rolling-snapshot",
+                    "updateProbe": {"value": "1/1/2025"},
+                }
+            ],
+        }
+
+        changed = update_source_probes(payload, {"fineli": "13/5/2026"})
+
+        self.assertEqual(changed, ("fineli",))
+        self.assertEqual(payload["sources"][0]["updateProbe"]["value"], "13/5/2026")
+        self.assertEqual(payload["sources"][0]["version"], "rolling-snapshot")
+
+    def test_combines_source_changes_once_in_detection_order(self) -> None:
+        self.assertEqual(
+            merge_changed_sources(("ciqual", "fineli"), ("fineli", "openfoodfacts")),
+            ("ciqual", "fineli", "openfoodfacts"),
+        )
+
+    def test_extracts_update_value_from_visible_html_text(self) -> None:
+        probe = UpdateProbe(
+            url="https://www.suomi.fi/example",
+            pattern=r"Updated:\s*(\d{1,2}/\d{1,2}/\d{4})",
+            value="1/1/2025",
+            maximum_bytes=1024,
+        )
+
+        value = extract_probe_value(
+            "fineli",
+            probe,
+            b"<span>Updated: <!-- marker --></span>13/5/2026",
+        )
+
+        self.assertEqual(value, "13/5/2026")
 
 
 def checksum_result(source_id: str, asset_id: str, checksum: str) -> dict[str, object]:

@@ -8,6 +8,12 @@
       "version": "rolling-snapshot",
       "homepage": "https://fineli.fi/fineli/en/open-data",
       "attribution": "Finnish Institute for Health and Welfare, Fineli",
+      "updateProbe": {
+        "url": "https://www.suomi.fi/services/eservice/fineli-finnish-food-composition-database-the-national-institute-for-health-and-welfare-thl/ba003f23-14e6-46b9-985c-30d654e35ef2",
+        "pattern": "Updated:\\s*(\\d{1,2}/\\d{1,2}/\\d{4})",
+        "value": "13/5/2026",
+        "maximumBytes": 1048576
+      },
       "license": {
         "name": "Creative Commons Attribution 4.0 International",
         "spdx": "CC-BY-4.0",

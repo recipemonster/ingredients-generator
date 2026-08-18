@@ -115,7 +115,18 @@ def main(arguments: list[str] | None = None) -> int:
         sources = load_sources(root / "sources.json")
         if args.command == "refresh-sources":
             changed = refresh_sources_manifest(root / "sources.json", sources, root / "raw")
-            print(json.dumps({"changedSources": changed}, ensure_ascii=False, sort_keys=True))
+            manual = tuple(
+                source.source_id
+                for source in sources
+                if source.source_id in changed and any(asset.manual_download for asset in source.assets)
+            )
+            print(
+                json.dumps(
+                    {"changedSources": changed, "manualSources": manual},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
             return 0
         if args.command in ("download", "all"):
             selected = set(args.source or ()) if args.command == "download" else set()

@@ -47,7 +47,12 @@ jobs:
           echo "tags_file=${tags_file}" >> "${GITHUB_OUTPUT}"
 
       - name: Check upstream datasets
-        run: make refresh-sources
+        id: upstream
+        shell: bash
+        run: |
+          result=$(make --no-print-directory refresh-sources)
+          echo "${result}"
+          echo "manual=$(jq -r '.manualSources | length > 0' <<< "${result}")" >> "${GITHUB_OUTPUT}"
 
       - name: Detect source changes
         id: changes
@@ -58,17 +63,18 @@ jobs:
             exit 0
           fi
           echo "changed=true" >> "${GITHUB_OUTPUT}"
+          echo "manual=${{ steps.upstream.outputs.manual }}" >> "${GITHUB_OUTPUT}"
 
       - name: Select candidate version
         id: candidate
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.changes.outputs.changed == 'true' && steps.changes.outputs.manual != 'true'
         shell: bash
         run: |
           make next-version PUBLISHED_TAGS="${{ steps.releases.outputs.tags_file }}"
           echo "tag=v$(tr -d '\n' < VERSION)" >> "${GITHUB_OUTPUT}"
 
       - name: Test and build candidate
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.changes.outputs.changed == 'true' && steps.changes.outputs.manual != 'true'
         run: |
           make test
           make build-release PREVIOUS_CATALOG=.release-base/nutrition.csv
@@ -76,7 +82,7 @@ jobs:
 
       - name: Create or update pull request
         id: pull_request
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.changes.outputs.changed == 'true' && steps.changes.outputs.manual != 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ github.token }}
@@ -91,6 +97,22 @@ jobs:
           add-paths: |
             sources.json
             VERSION
+
+      - name: Create or update manual source pull request
+        if: steps.changes.outputs.changed == 'true' && steps.changes.outputs.manual == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ github.token }}
+          branch: automation/manual-dataset-refresh
+          delete-branch: true
+          commit-message: detect manually acquired dataset update
+          title: Fineli dataset update detected
+          body: |
+            Fineli's official update marker changed.
+
+            The upstream archive blocks unattended downloads. Acquire the current archive, verify its contents and checksum, then complete the catalog update before merging this pull request. No catalog version was created from stale data.
+          add-paths: |
+            sources.json
 
       - name: Upload candidate catalog
         if: steps.pull_request.outputs['pull-request-number'] != ''

@@ -16,7 +16,7 @@ download-release:
 	$(RUN) download $(foreach source,$(RELEASE_SOURCES),--source $(source))
 
 refresh-sources:
-	$(RUN) refresh-sources
+	@$(RUN) refresh-sources
 
 draft:
 	$(RUN) draft $(PREVIOUS_CATALOG_FLAG)
