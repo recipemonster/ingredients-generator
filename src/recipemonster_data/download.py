@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import zipfile
+from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -28,16 +29,12 @@ def download_sources(
 ) -> dict[str, object]:
     raw_directory.mkdir(parents=True, exist_ok=True)
     lock_path = raw_directory / "download-lock.json"
-    existing = json.loads(lock_path.read_text(encoding="utf-8")) if lock_path.exists() else {"assets": []}
-    locked_assets = {
-        (str(item["sourceId"]), str(item["assetId"])): item
-        for item in existing.get("assets", [])
-    }
+    observed: dict[tuple[str, str], dict[str, object]] = {}
     for source in sources:
         for asset in source.assets:
             local_file = local_files.get(f"{source.source_id}/{asset.asset_id}") or local_files.get(source.source_id)
             try:
-                locked_assets[(source.source_id, asset.asset_id)] = acquire_asset(source, asset, raw_directory, local_file)
+                observed[(source.source_id, asset.asset_id)] = acquire_asset(source, asset, raw_directory, local_file)
             except (HTTPError, URLError) as error:
                 if asset.manual_download:
                     raise RuntimeError(
@@ -45,15 +42,17 @@ def download_sources(
                         f"{source.homepage} and pass --file {source.source_id}=/path/to/{asset.file}"
                     ) from error
                 raise
-    lock = {
-        "schemaVersion": 1,
-        "assets": sorted(locked_assets.values(), key=lambda item: (str(item["sourceId"]), str(item["assetId"]))),
-    }
-    write_json(lock_path, lock)
-    return lock
+    update_download_lock(lock_path, observed)
+    return json.loads(lock_path.read_text(encoding="utf-8"))
 
 
-def acquire_asset(source: Source, asset: Asset, raw_directory: Path, local_file: Path | None) -> dict[str, object]:
+def acquire_asset(
+    source: Source,
+    asset: Asset,
+    raw_directory: Path,
+    local_file: Path | None,
+    verify_pinned_checksum: bool = True,
+) -> dict[str, object]:
     destination = raw_directory / asset.file
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{asset.file}.", dir=raw_directory)
     os.close(descriptor)
@@ -75,7 +74,7 @@ def acquire_asset(source: Source, asset: Asset, raw_directory: Path, local_file:
                 if content_length > asset.maximum_bytes:
                     raise ValueError(f"asset {source.source_id}/{asset.asset_id} exceeds its size limit")
                 digest, size = copy_limited(response, output_file, asset.maximum_bytes)
-        if asset.sha256 and digest != asset.sha256:
+        if verify_pinned_checksum and asset.sha256 and digest != asset.sha256:
             raise ValueError(f"asset {source.source_id}/{asset.asset_id} does not match its pinned SHA-256")
         validate_asset_format(temporary, asset)
         os.replace(temporary, destination)
@@ -88,6 +87,73 @@ def acquire_asset(source: Source, asset: Asset, raw_directory: Path, local_file:
         "sha256": digest,
         "bytes": size,
     }
+
+
+def refresh_sources_manifest(
+    manifest_path: Path,
+    sources: tuple[Source, ...],
+    raw_directory: Path,
+    snapshot_date: date | None = None,
+) -> tuple[str, ...]:
+    raw_directory.mkdir(parents=True, exist_ok=True)
+    observed: dict[tuple[str, str], dict[str, object]] = {}
+    for source in sources:
+        for asset in source.assets:
+            if asset.manual_download:
+                continue
+            observed[(source.source_id, asset.asset_id)] = acquire_asset(
+                source,
+                asset,
+                raw_directory,
+                None,
+                verify_pinned_checksum=False,
+            )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    changed_sources = update_source_checksums(payload, observed, snapshot_date or date.today())
+    if changed_sources:
+        manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    update_download_lock(raw_directory / "download-lock.json", observed)
+    return changed_sources
+
+
+def update_source_checksums(
+    payload: dict[str, object],
+    observed: dict[tuple[str, str], dict[str, object]],
+    snapshot_date: date,
+) -> tuple[str, ...]:
+    changed_sources: list[str] = []
+    for source in payload.get("sources", []):
+        source_id = str(source.get("id", ""))
+        source_changed = False
+        for asset in source.get("assets", []):
+            identity = source_id, str(asset.get("id", ""))
+            result = observed.get(identity)
+            if result is None:
+                continue
+            checksum = str(result["sha256"])
+            if asset.get("sha256") != checksum:
+                asset["sha256"] = checksum
+                source_changed = True
+        if source_changed:
+            source["version"] = snapshot_date.isoformat()
+            changed_sources.append(source_id)
+    return tuple(changed_sources)
+
+
+def update_download_lock(lock_path: Path, observed: dict[tuple[str, str], dict[str, object]]) -> None:
+    existing = json.loads(lock_path.read_text(encoding="utf-8")) if lock_path.exists() else {"assets": []}
+    locked_assets = {
+        (str(item["sourceId"]), str(item["assetId"])): item
+        for item in existing.get("assets", [])
+    }
+    locked_assets.update(observed)
+    write_json(
+        lock_path,
+        {
+            "schemaVersion": 1,
+            "assets": sorted(locked_assets.values(), key=lambda item: (str(item["sourceId"]), str(item["assetId"]))),
+        },
+    )
 
 
 def copy_limited(input_file, output_file, maximum_bytes: int) -> tuple[str, int]:

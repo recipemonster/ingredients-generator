@@ -1,0 +1,64 @@
+name: Tag catalog version
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - VERSION
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: catalog-version
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create version tag
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read published versions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' > published-tags.txt
+
+      - name: Validate version
+        run: make validate-version PUBLISHED_TAGS=published-tags.txt
+
+      - name: Create tag
+        id: tag
+        shell: bash
+        run: |
+          tag="v$(tr -d '\n' < VERSION)"
+          existing_commit=$(git rev-list -n 1 "${tag}" 2>/dev/null || true)
+          if [[ -n "${existing_commit}" && "${existing_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "${tag} already points to ${existing_commit}" >&2
+            exit 1
+          fi
+          if [[ -z "${existing_commit}" ]]; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git tag -a "${tag}" -m "${tag}"
+            git push origin "${tag}"
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start release workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ingredient-catalog.yml --ref "${{ steps.tag.outputs.tag }}"

@@ -12,8 +12,10 @@ from recipemonster_data.build import (
     NAME_COLUMNS,
     NUTRITION_COLUMNS,
     SUPPORTED_LANGUAGES,
+    assign_ingredient_ids,
     build_catalog,
     build_catalog_draft,
+    load_previous_ingredient_ids,
     simplify_source_names,
 )
 from recipemonster_data.config import Asset, Source
@@ -85,6 +87,7 @@ class PipelineTest(unittest.TestCase):
                 },
             )
             mappings = create_nutrient_mappings(root)
+            previous_catalog = write_previous_catalog(root, {"apple": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
             (root / "names_es.csv").write_text(
                 "taxonomy_key,names\n"
                 "potato,patata|patatas\n",
@@ -96,7 +99,7 @@ class PipelineTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            manifest = build_catalog(sources, root / "raw", root / "dist", mappings)
+            manifest = build_catalog(sources, root / "raw", root / "dist", mappings, previous_catalog)
             result = validate_catalog(root / "dist")
 
             self.assertEqual(manifest["ingredientCount"], 2)
@@ -107,6 +110,13 @@ class PipelineTest(unittest.TestCase):
             nutrition = read_output_csv(root / "dist" / "nutrition.csv")
             self.assertEqual(tuple(nutrition[0]), NUTRITION_COLUMNS)
             self.assertEqual({row["nutrition_source"] for row in nutrition}, {"ciqual", "usda-sr-legacy"})
+            self.assertEqual(
+                {row["taxonomy_key"]: row["ingredient_id"] for row in nutrition},
+                {
+                    "apple": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "potato": "ingredient_e91c254ad58860a02c788dfb5c1a65d6",
+                },
+            )
             self.assertEqual({row["basis_g"] for row in nutrition}, {"100"})
             self.assertEqual({row["energy_kcal_kcal"] for row in nutrition}, {"52", "77"})
             english = read_output_csv(root / "dist" / "ingredients_en.csv")
@@ -133,7 +143,7 @@ class PipelineTest(unittest.TestCase):
             (root / "dist" / "ingredients_it.csv").write_text("ingredient_id,name\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "missing it names"):
                 validate_catalog(root / "dist")
-            build_catalog(sources, root / "raw", root / "dist", mappings)
+            build_catalog(sources, root / "raw", root / "dist", mappings, previous_catalog)
             self.assertEqual(
                 {name: (root / "dist" / name).read_bytes() for name in generated_files},
                 first_build,
@@ -175,6 +185,41 @@ class PipelineTest(unittest.TestCase):
             path.write_text("wrong\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid CSV header"):
                 validate_catalog(path.parent)
+
+    def test_reuses_released_ids_and_assigns_new_ids(self) -> None:
+        ingredients = {
+            key: TaxonomyIngredient(key=key, names={}, parents=(), properties={})
+            for key in ("apple", "potato")
+        }
+
+        assigned = assign_ingredient_ids(
+            ingredients,
+            {"apple": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        )
+
+        self.assertEqual(assigned["apple"], "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        self.assertEqual(assigned["potato"], "ingredient_e91c254ad58860a02c788dfb5c1a65d6")
+
+    def test_rejects_disappearing_released_ingredient(self) -> None:
+        ingredient = TaxonomyIngredient(key="apple", names={}, parents=(), properties={})
+
+        with self.assertRaisesRegex(ValueError, "previously released ingredients disappeared: potato"):
+            assign_ingredient_ids(
+                {ingredient.key: ingredient},
+                {
+                    "apple": "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "potato": "ingredient_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                },
+            )
+
+    def test_rejects_duplicate_id_in_previous_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            duplicate_id = "ingredient_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            path = write_previous_catalog(root, {"apple": duplicate_id, "potato": duplicate_id})
+
+            with self.assertRaisesRegex(ValueError, "is used by apple and potato"):
+                load_previous_ingredient_ids(path)
 
 
 def test_sources() -> tuple[Source, ...]:
@@ -312,6 +357,18 @@ def create_nutrient_mappings(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    return path
+
+
+def write_previous_catalog(root: Path, identities: dict[str, str]) -> Path:
+    path = root / "previous-nutrition.csv"
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=NUTRITION_COLUMNS, lineterminator="\n")
+        writer.writeheader()
+        for taxonomy_key, ingredient_id in identities.items():
+            row = {column: "" for column in NUTRITION_COLUMNS}
+            row.update({"ingredient_id": ingredient_id, "taxonomy_key": taxonomy_key})
+            writer.writerow(row)
     return path
 
 
