@@ -35,7 +35,8 @@ def parser() -> argparse.ArgumentParser:
         metavar="SOURCE[/ASSET]=PATH",
         help="use a manually downloaded source asset",
     )
-    subcommands.add_parser("refresh-sources", help="check upstream datasets and update changed checksums")
+    refresh = subcommands.add_parser("refresh-sources", help="check upstream datasets and update changed checksums")
+    refresh.add_argument("--source", action="append")
 
     build = subcommands.add_parser("build", help="build a deterministic RecipeMonster catalog")
     build.add_argument("--source", action="append")
@@ -114,19 +115,12 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         sources = load_sources(root / "sources.json")
         if args.command == "refresh-sources":
-            changed = refresh_sources_manifest(root / "sources.json", sources, root / "raw")
-            manual = tuple(
-                source.source_id
-                for source in sources
-                if source.source_id in changed and any(asset.manual_download for asset in source.assets)
+            changed = refresh_sources_manifest(
+                root / "sources.json",
+                select_sources(sources, args.source),
+                root / "raw",
             )
-            print(
-                json.dumps(
-                    {"changedSources": changed, "manualSources": manual},
-                    ensure_ascii=False,
-                    sort_keys=True,
-                )
-            )
+            print(json.dumps({"changedSources": changed}, ensure_ascii=False, sort_keys=True))
             return 0
         if args.command in ("download", "all"):
             selected = set(args.source or ()) if args.command == "download" else set()
@@ -216,3 +210,14 @@ def selected_downloaded_sources(
     if not any(source.role == "nutrition" for source in available):
         raise ValueError("no fully downloaded nutrition source is available")
     return available
+
+
+def select_sources(sources: tuple[Source, ...], selected_values: list[str] | None) -> tuple[Source, ...]:
+    selected = set(selected_values or ())
+    known = {source.source_id for source in sources}
+    unknown = selected - known
+    if unknown:
+        raise ValueError(f"unknown source: {', '.join(sorted(unknown))}")
+    if not selected:
+        return sources
+    return tuple(source for source in sources if source.source_id in selected)

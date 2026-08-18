@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recipemonster_data.build import NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
+from recipemonster_data.build import NAME_COLUMNS, NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
 from recipemonster_data.pages import generate_pages, generate_preview
 
 
@@ -23,6 +23,7 @@ class PagesTest(unittest.TestCase):
                 {
                     "ingredient_a": ("apple", "Apple & pear", "53"),
                     "ingredient_b": ("potato", "Potato", "77"),
+                    "ingredient_c": ("salt", "Salt", ""),
                 },
             )
 
@@ -33,6 +34,7 @@ class PagesTest(unittest.TestCase):
             self.assertIn("v0.1.0-rc1", index)
             self.assertIn("v0.1.0", index)
             self.assertIn("ingredient_b", release)
+            self.assertIn("ingredient_c", release)
             self.assertIn("energy_kcal_kcal", release)
             self.assertIn("Apple &amp; pear", release)
             self.assertNotIn("Apple & pear", release)
@@ -93,6 +95,22 @@ class PagesTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be newer"):
                 generate_preview(releases, candidate, root / "site", "v0.1.1", 42)
 
+    def test_reads_legacy_language_files_using_nutrition_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            release = root / "releases" / "v0.1.0"
+            write_release(release, {"ingredient_a": ("apple", "Apple", "52")})
+            for language in SUPPORTED_LANGUAGES:
+                path = release / f"ingredients_{language}.csv"
+                with path.open("w", encoding="utf-8", newline="") as file:
+                    writer = csv.writer(file, lineterminator="\n")
+                    writer.writerow(("ingredient_id", "name"))
+                    writer.writerow(("ingredient_a", "Apple"))
+
+            generate_pages(root / "releases", root / "site")
+
+            self.assertIn("1", (root / "site" / "index.html").read_text(encoding="utf-8"))
+
 
 def write_release(directory: Path, ingredients: dict[str, tuple[str, str, str]]) -> None:
     directory.mkdir(parents=True)
@@ -100,6 +118,8 @@ def write_release(directory: Path, ingredients: dict[str, tuple[str, str, str]])
         writer = csv.DictWriter(file, fieldnames=NUTRITION_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for ingredient_id, (taxonomy_key, _, energy) in ingredients.items():
+            if not energy:
+                continue
             row = {column: "" for column in NUTRITION_COLUMNS}
             row.update(
                 {
@@ -116,10 +136,16 @@ def write_release(directory: Path, ingredients: dict[str, tuple[str, str, str]])
             writer.writerow(row)
     for language in SUPPORTED_LANGUAGES:
         with (directory / f"ingredients_{language}.csv").open("w", encoding="utf-8", newline="") as file:
-            writer = csv.writer(file, lineterminator="\n")
-            writer.writerow(("ingredient_id", "name"))
-            for ingredient_id, (_, name, _) in ingredients.items():
-                writer.writerow((ingredient_id, name if language == "en" else f"{name} {language}"))
+            writer = csv.DictWriter(file, fieldnames=NAME_COLUMNS, lineterminator="\n")
+            writer.writeheader()
+            for ingredient_id, (taxonomy_key, name, _) in ingredients.items():
+                writer.writerow(
+                    {
+                        "ingredient_id": ingredient_id,
+                        "taxonomy_key": taxonomy_key,
+                        "name": name if language == "en" else f"{name} {language}",
+                    }
+                )
 
 
 if __name__ == "__main__":

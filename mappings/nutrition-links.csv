@@ -1,16 +1,82 @@
 taxonomy_key,dataset,id_type,record_id
+almond oil,ciqual,record,17030
+apricot kernel oil,ciqual,record,17020
+arctic char,ciqual,record,26171
+argan oil,ciqual,record,17900
+avocado oil,ciqual,record,17100
+barley,ciqual,record,9320
 beef meat,ciqual,record,6231
-corn,usda-sr-legacy,usda_ndb,11167
-cornmeal,usda-sr-legacy,usda_ndb,20020
+bitter orange,ciqual,record,13432
+black truffle,ciqual,record,20106
+breadfruit,ciqual,record,54500
+buffalo milk,ciqual,record,19270
+burbot,ciqual,record,27023
+camelina oil,ciqual,record,17800
+candied orange peel,ciqual,record,31021
+capelin,ciqual,record,26108
+clam,ciqual,record,10017
+cod liver,ciqual,record,26141
+common dentex,ciqual,record,26103
+common sole,ciqual,record,26058
+crab,ciqual,record,10039
+crayfish,ciqual,record,10030
 crouton,ciqual,record,7432
+duck egg,ciqual,record,22060
+durian,ciqual,record,13529
+european perch,ciqual,record,27010
+european plaice,ciqual,record,26055
+feijoa,ciqual,record,13061
+french toast,ciqual,record,39236
+garfish,ciqual,record,26166
+gelatin,ciqual,record,11007
+goat milk,ciqual,record,19202
+grouper,ciqual,record,26178
+jackfruit,ciqual,record,13499
+khorasan wheat,ciqual,record,9003
 lima bean,ciqual,record,20529
+ling,ciqual,record,26130
+lobster,ciqual,record,10010
+longan,ciqual,record,13552
+marshmallow,ciqual,record,31050
+mirabelle plum,ciqual,record,13027
+morel,ciqual,record,20105
+mortadella,ciqual,record,30789
+nile perch,ciqual,record,27025
 nougat,ciqual,record,31127
 oat flakes,ciqual,record,32140
+okra,ciqual,record,58100
+ostrich,ciqual,record,36800
+pacific cod,ciqual,record,26125
+palm kernel fat,ciqual,record,16200
 palm oil,ciqual,record,16150
 palm oil and fat,ciqual,record,16150
-pork fillet,usda-sr-legacy,usda_ndb,10218
+pomegranate,ciqual,record,13018
+poppyseed oil,ciqual,record,17325
 pork knuckle,ciqual,record,28474
 pork loin,ciqual,record,28302
+potato starch,ciqual,record,4090
+purslane,ciqual,record,20127
+quince,ciqual,record,13010
+rainbow trout,ciqual,record,27009
+rambutan,ciqual,record,13077
+red onion,ciqual,record,20238
+rhubarb,ciqual,record,13047
+rice bran,ciqual,record,9643
+rice bran oil,ciqual,record,17390
+rice starch,ciqual,record,96781
+rusk,ciqual,record,7300
+smoked sausage,ciqual,record,30102
+snail,ciqual,record,10008
+snow pea,ciqual,record,20173
+spelt,ciqual,record,9001
+spiny lobster,ciqual,record,10015
 split pea,ciqual,record,20515
+sugar apple,ciqual,record,13435
+taro,ciqual,record,53200
+tea leaf,ciqual,record,18076
+tempeh,ciqual,record,20917
+tilapia,ciqual,record,27019
 tomato,ciqual,record,20385
-whole wheat,usda-sr-legacy,usda_ndb,20072
+trout,ciqual,record,27008
+wheat germ oil,ciqual,record,17110
+yellow onion,ciqual,record,20239
