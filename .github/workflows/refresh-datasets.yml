@@ -40,7 +40,7 @@ jobs:
         run: |
           tags_file="${RUNNER_TEMP}/published-tags.txt"
           gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' > "${tags_file}"
-          base_tag=$(PYTHONPATH=src python3 -m recipemonster_data --root . latest-version --published-tags "${tags_file}")
+          base_tag=$(PYTHONPATH=. python3 -m src --root . latest-version --published-tags "${tags_file}")
           mkdir -p .release-base
           gh release download "${base_tag}" --pattern ingredients_en.tar.gz --dir .release-base
           gh release download "${base_tag}" --pattern nutrition.tar.gz --dir .release-base

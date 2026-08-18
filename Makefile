@@ -1,5 +1,5 @@
 PYTHON ?= python3
-RUN = PYTHONPATH=src $(PYTHON) -m recipemonster_data --root .
+RUN = PYTHONPATH=. $(PYTHON) -m src --root .
 LANGUAGES = en pl de es it
 RELEASE_DIR = dist/release
 RELEASE_SOURCES = ciqual openfoodfacts-ingredients
@@ -32,7 +32,7 @@ validate:
 	$(RUN) validate
 
 test:
-	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
+	PYTHONPATH=. $(PYTHON) -m unittest discover -s tests -v
 
 archives:
 	mkdir -p $(RELEASE_DIR)

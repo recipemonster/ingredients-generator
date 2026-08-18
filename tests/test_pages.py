@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recipemonster_data.build import NAME_COLUMNS, NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
-from recipemonster_data.pages import generate_pages, generate_preview
+from src.build import NAME_COLUMNS, NUTRITION_COLUMNS, SUPPORTED_LANGUAGES
+from src.pages import generate_pages, generate_preview
 
 
 class PagesTest(unittest.TestCase):
