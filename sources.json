@@ -8,12 +8,6 @@
       "version": "rolling-snapshot",
       "homepage": "https://fineli.fi/fineli/en/open-data",
       "attribution": "Finnish Institute for Health and Welfare, Fineli",
-      "updateProbe": {
-        "url": "https://www.suomi.fi/services/eservice/fineli-finnish-food-composition-database-the-national-institute-for-health-and-welfare-thl/ba003f23-14e6-46b9-985c-30d654e35ef2",
-        "pattern": "Updated:\\s*(\\d{1,2}/\\d{1,2}/\\d{4})",
-        "value": "13/5/2026",
-        "maximumBytes": 1048576
-      },
       "license": {
         "name": "Creative Commons Attribution 4.0 International",
         "spdx": "CC-BY-4.0",
@@ -27,7 +21,11 @@
           "format": "zip",
           "sha256": "",
           "maximumBytes": 10485760,
-          "manualDownload": true
+          "manualDownload": true,
+          "versionCheck": {
+            "field": "filename",
+            "value": "Fineli_Rel20__74_ravintotekij__"
+          }
         }
       ]
     },
@@ -50,7 +48,11 @@
           "file": "alim_2025_11_03.xml",
           "format": "xml",
           "sha256": "e0b1de25b3039028205e9d54a96892e403e1b313c2efeb41180fabe132627478",
-          "maximumBytes": 4194304
+          "maximumBytes": 4194304,
+          "versionCheck": {
+            "field": "etag",
+            "value": "\"8e1171d63cee4b6010cfce25dd29243d\""
+          }
         },
         {
           "id": "nutrients",
@@ -58,7 +60,11 @@
           "file": "const_2025_11_03.xml",
           "format": "xml",
           "sha256": "3a231ea3e9836e4ac0b6ff94511e010210b2523d1b8b486c6b29e211066ba3f3",
-          "maximumBytes": 1048576
+          "maximumBytes": 1048576,
+          "versionCheck": {
+            "field": "etag",
+            "value": "\"d8f2f25fdacb887bc993a6eeaf80f203\""
+          }
         },
         {
           "id": "values",
@@ -66,7 +72,11 @@
           "file": "compo_2025_11_03.xml",
           "format": "xml",
           "sha256": "8c46a9032ece4eab4ffccc9dfcb0c490ec2f416aa664cc1ee013b241c6bdd4af",
-          "maximumBytes": 104857600
+          "maximumBytes": 104857600,
+          "versionCheck": {
+            "field": "etag",
+            "value": "\"2da725585946434df320d8041631998b\""
+          }
         }
       ]
     },
@@ -89,7 +99,11 @@
           "file": "FoodData_Central_sr_legacy_food_csv_2018-04.zip",
           "format": "zip",
           "sha256": "b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0",
-          "maximumBytes": 16777216
+          "maximumBytes": 16777216,
+          "versionCheck": {
+            "field": "etag",
+            "value": "\"65398aeb-5cb0e0\""
+          }
         }
       ]
     },
@@ -115,7 +129,11 @@
           "file": "openfoodfacts-ingredients.txt",
           "format": "text",
           "sha256": "65334ae1bf5c536a792c43e67b0a6ba9750da5128d118cce162f98afc9c25264",
-          "maximumBytes": 8388608
+          "maximumBytes": 8388608,
+          "versionCheck": {
+            "field": "etag",
+            "value": "bootstrap:65334ae1bf5c536a792c43e67b0a6ba9750da5128d118cce162f98afc9c25264"
+          }
         }
       ]
     }

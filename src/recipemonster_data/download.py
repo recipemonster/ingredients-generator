@@ -3,29 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import tempfile
 import zipfile
 from datetime import date
-from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .config import ALLOWED_HOSTS, Asset, Source, UpdateProbe
-
-
-class TextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self.parts.append(data)
-
-    def text(self) -> str:
-        return " ".join(" ".join(self.parts).split())
+from .config import ALLOWED_HOSTS, Asset, Source
 
 
 class SafeRedirectHandler(HTTPRedirectHandler):
@@ -110,15 +96,23 @@ def refresh_sources_manifest(
     snapshot_date: date | None = None,
 ) -> tuple[str, ...]:
     raw_directory.mkdir(parents=True, exist_ok=True)
-    observed: dict[tuple[str, str], dict[str, object]] = {}
-    observed_probes: dict[str, str] = {}
+    downloaded: dict[tuple[str, str], dict[str, object]] = {}
+    observed_versions: dict[tuple[str, str], str] = {}
     for source in sources:
-        if source.update_probe is not None:
-            observed_probes[source.source_id] = acquire_update_probe(source.source_id, source.update_probe)
         for asset in source.assets:
-            if asset.manual_download:
+            identity = source.source_id, asset.asset_id
+            try:
+                observed_version = inspect_asset_version(source, asset)
+            except (HTTPError, URLError) as error:
+                if asset.manual_download:
+                    raise RuntimeError(
+                        f"version check for {source.source_id}/{asset.asset_id} was blocked by the upstream server"
+                    ) from error
+                raise
+            observed_versions[identity] = observed_version
+            if observed_version == asset.version_check.value:
                 continue
-            observed[(source.source_id, asset.asset_id)] = acquire_asset(
+            downloaded[identity] = acquire_asset(
                 source,
                 asset,
                 raw_directory,
@@ -126,51 +120,74 @@ def refresh_sources_manifest(
                 verify_pinned_checksum=False,
             )
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    changed_sources = update_source_checksums(payload, observed, snapshot_date or date.today())
-    changed_sources = merge_changed_sources(changed_sources, update_source_probes(payload, observed_probes))
+    changed_sources = update_source_checksums(payload, downloaded, snapshot_date or date.today())
+    changed_sources = merge_changed_sources(changed_sources, update_asset_versions(payload, observed_versions))
     if changed_sources:
         manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    update_download_lock(raw_directory / "download-lock.json", observed)
+    if downloaded:
+        update_download_lock(raw_directory / "download-lock.json", downloaded)
     return changed_sources
 
 
-def acquire_update_probe(source_id: str, probe: UpdateProbe) -> str:
+def inspect_asset_version(source: Source, asset: Asset) -> str:
     request = Request(
-        probe.url,
+        asset.url,
+        method="HEAD",
         headers={
-            "Accept": "text/html,application/xhtml+xml",
+            "Accept": "application/zip, application/xml, text/plain, text/xml, application/octet-stream",
             "User-Agent": "RecipeMonster data builder",
         },
     )
-    with build_opener(SafeRedirectHandler()).open(request, timeout=60) as response:
-        content_length = int(response.headers.get("Content-Length", "0") or 0)
-        if content_length > probe.maximum_bytes:
-            raise ValueError(f"update probe for {source_id} exceeds its size limit")
-        body = response.read(probe.maximum_bytes + 1)
-    if len(body) > probe.maximum_bytes:
-        raise ValueError(f"update probe for {source_id} exceeds its size limit")
-    return extract_probe_value(source_id, probe, body)
+    try:
+        response = build_opener(SafeRedirectHandler()).open(request, timeout=60)
+    except HTTPError as error:
+        if error.code not in {405, 501}:
+            raise
+        request = Request(
+            asset.url,
+            headers={
+                "Accept": "application/zip, application/xml, text/plain, text/xml, application/octet-stream",
+                "Range": "bytes=0-0",
+                "User-Agent": "RecipeMonster data builder",
+            },
+        )
+        response = build_opener(SafeRedirectHandler()).open(request, timeout=60)
+    with response:
+        return extract_asset_version(source, asset, response.headers, response.geturl())
 
 
-def extract_probe_value(source_id: str, probe: UpdateProbe, body: bytes) -> str:
-    extractor = TextExtractor()
-    extractor.feed(body.decode("utf-8", errors="replace"))
-    match = re.search(probe.pattern, extractor.text())
-    if match is None or match.lastindex != 1:
-        raise ValueError(f"update probe for {source_id} did not return one version value")
-    return match.group(1)
+def extract_asset_version(source: Source, asset: Asset, headers, final_url: str) -> str:
+    if asset.version_check.field == "etag":
+        value = headers.get("ETag", "").strip()
+    elif asset.version_check.field == "last-modified":
+        value = headers.get("Last-Modified", "").strip()
+    else:
+        value = headers.get_filename() or Path(unquote(urlparse(final_url).path)).name
+    if not value:
+        raise ValueError(
+            f"version check for {source.source_id}/{asset.asset_id} returned no {asset.version_check.field}"
+        )
+    return value
 
 
-def update_source_probes(payload: dict[str, object], observed: dict[str, str]) -> tuple[str, ...]:
+def update_asset_versions(
+    payload: dict[str, object],
+    observed: dict[tuple[str, str], str],
+) -> tuple[str, ...]:
     changed_sources: list[str] = []
     for source in payload.get("sources", []):
         source_id = str(source.get("id", ""))
-        value = observed.get(source_id)
-        probe = source.get("updateProbe")
-        if value is None or not isinstance(probe, dict) or probe.get("value") == value:
-            continue
-        probe["value"] = value
-        changed_sources.append(source_id)
+        source_changed = False
+        for asset in source.get("assets", []):
+            identity = source_id, str(asset.get("id", ""))
+            value = observed.get(identity)
+            check = asset.get("versionCheck")
+            if value is None or not isinstance(check, dict) or check.get("value") == value:
+                continue
+            check["value"] = value
+            source_changed = True
+        if source_changed:
+            changed_sources.append(source_id)
     return tuple(changed_sources)
 
 

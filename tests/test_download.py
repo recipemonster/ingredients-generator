@@ -3,15 +3,16 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import date
+from email.message import Message
 from pathlib import Path
 
-from recipemonster_data.config import UpdateProbe
+from recipemonster_data.config import Asset, Source, VersionCheck
 from recipemonster_data.download import (
-    extract_probe_value,
+    extract_asset_version,
     merge_changed_sources,
+    update_asset_versions,
     update_download_lock,
     update_source_checksums,
-    update_source_probes,
 )
 
 
@@ -64,22 +65,30 @@ class DownloadTest(unittest.TestCase):
             self.assertIn('"sourceId": "manual"', contents)
             self.assertIn('"sourceId": "automatic"', contents)
 
-    def test_updates_manual_source_probe_without_claiming_new_dataset_version(self) -> None:
+    def test_updates_asset_version_without_claiming_new_dataset_content(self) -> None:
         payload = {
             "schemaVersion": 1,
             "sources": [
                 {
                     "id": "fineli",
                     "version": "rolling-snapshot",
-                    "updateProbe": {"value": "1/1/2025"},
+                    "assets": [
+                        {
+                            "id": "archive",
+                            "versionCheck": {"field": "filename", "value": "Fineli_Rel20.zip"},
+                        }
+                    ],
                 }
             ],
         }
 
-        changed = update_source_probes(payload, {"fineli": "13/5/2026"})
+        changed = update_asset_versions(payload, {("fineli", "archive"): "Fineli_Rel21.zip"})
 
         self.assertEqual(changed, ("fineli",))
-        self.assertEqual(payload["sources"][0]["updateProbe"]["value"], "13/5/2026")
+        self.assertEqual(
+            payload["sources"][0]["assets"][0]["versionCheck"]["value"],
+            "Fineli_Rel21.zip",
+        )
         self.assertEqual(payload["sources"][0]["version"], "rolling-snapshot")
 
     def test_combines_source_changes_once_in_detection_order(self) -> None:
@@ -88,21 +97,26 @@ class DownloadTest(unittest.TestCase):
             ("ciqual", "fineli", "openfoodfacts"),
         )
 
-    def test_extracts_update_value_from_visible_html_text(self) -> None:
-        probe = UpdateProbe(
-            url="https://www.suomi.fi/example",
-            pattern=r"Updated:\s*(\d{1,2}/\d{1,2}/\d{4})",
-            value="1/1/2025",
-            maximum_bytes=1024,
+    def test_extracts_dataset_release_from_redirect_filename(self) -> None:
+        source, asset = test_source("filename", "Fineli_Rel20.zip")
+
+        value = extract_asset_version(
+            source,
+            asset,
+            Message(),
+            "https://fineli.fi/fineli/content/file/49/Fineli_Rel21.zip",
         )
 
-        value = extract_probe_value(
-            "fineli",
-            probe,
-            b"<span>Updated: <!-- marker --></span>13/5/2026",
-        )
+        self.assertEqual(value, "Fineli_Rel21.zip")
 
-        self.assertEqual(value, "13/5/2026")
+    def test_extracts_dataset_release_from_etag_without_reading_body(self) -> None:
+        source, asset = test_source("etag", '"old"')
+        headers = Message()
+        headers["ETag"] = '"new"'
+
+        value = extract_asset_version(source, asset, headers, asset.url)
+
+        self.assertEqual(value, '"new"')
 
 
 def checksum_result(source_id: str, asset_id: str, checksum: str) -> dict[str, object]:
@@ -113,6 +127,31 @@ def checksum_result(source_id: str, asset_id: str, checksum: str) -> dict[str, o
         "sha256": checksum,
         "bytes": 1,
     }
+
+
+def test_source(field: str, value: str) -> tuple[Source, Asset]:
+    asset = Asset(
+        source_id="fineli",
+        asset_id="archive",
+        url="https://fineli.fi/fineli/content/file/49",
+        file="fineli.zip",
+        format="zip",
+        sha256="",
+        maximum_bytes=10_000_000,
+        manual_download=True,
+        version_check=VersionCheck(field=field, value=value),
+    )
+    source = Source(
+        source_id="fineli",
+        role="nutrition",
+        name="Fineli",
+        version="rolling-snapshot",
+        homepage="https://fineli.fi",
+        attribution="THL",
+        license={"name": "test", "spdx": "test", "url": "https://example.test"},
+        assets=(asset,),
+    )
+    return source, asset
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ from recipemonster_data.build import (
     load_previous_ingredient_ids,
     simplify_source_names,
 )
-from recipemonster_data.config import Asset, Source
+from recipemonster_data.config import Asset, Source, VersionCheck
 from recipemonster_data.download import download_sources
 from recipemonster_data.normalize import decimal_value, normalize_name
 from recipemonster_data.taxonomy import TaxonomyIngredient, localized_names, mapped_base_ingredients, read_ingredient_taxonomy
@@ -234,9 +234,9 @@ def test_sources() -> tuple[Source, ...]:
             attribution="Anses",
             license=license_data,
             assets=(
-                Asset("ciqual", "foods", "https://entrepot.recherche.data.gouv.fr/a", "foods.xml", "xml", "", 100_000, False),
-                Asset("ciqual", "nutrients", "https://entrepot.recherche.data.gouv.fr/b", "nutrients.xml", "xml", "", 100_000, False),
-                Asset("ciqual", "values", "https://entrepot.recherche.data.gouv.fr/c", "values.xml", "xml", "", 100_000, False),
+                Asset("ciqual", "foods", "https://entrepot.recherche.data.gouv.fr/a", "foods.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
+                Asset("ciqual", "nutrients", "https://entrepot.recherche.data.gouv.fr/b", "nutrients.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
+                Asset("ciqual", "values", "https://entrepot.recherche.data.gouv.fr/c", "values.xml", "xml", "", 100_000, False, VersionCheck("etag", "test")),
             ),
         ),
         Source(
@@ -247,7 +247,7 @@ def test_sources() -> tuple[Source, ...]:
             homepage="https://fdc.nal.usda.gov/download-datasets/",
             attribution="USDA",
             license=license_data,
-            assets=(Asset("usda-sr-legacy", "archive", "https://fdc.nal.usda.gov/a", "usda.zip", "zip", "", 1_000_000, False),),
+            assets=(Asset("usda-sr-legacy", "archive", "https://fdc.nal.usda.gov/a", "usda.zip", "zip", "", 1_000_000, False, VersionCheck("etag", "test")),),
         ),
         Source(
             source_id="openfoodfacts-ingredients",
@@ -267,6 +267,7 @@ def test_sources() -> tuple[Source, ...]:
                     "",
                     1_000_000,
                     False,
+                    VersionCheck("etag", "test"),
                 ),
             ),
         ),
