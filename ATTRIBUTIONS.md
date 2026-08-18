@@ -14,7 +14,6 @@ RecipeMonster builds a simple multilingual ingredient catalog from the sources b
 ## Anses-Ciqual
 
 - Purpose: nutrition values
-- Version: 2025-11-03
 - Source: [Anses-Ciqual French food composition table](https://doi.org/10.57745/RDMHWY)
 - License: [Etalab Open License 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/)
 - Attribution: Anses. 2025. Ciqual French food composition table
@@ -22,7 +21,6 @@ RecipeMonster builds a simple multilingual ingredient catalog from the sources b
 ## USDA FoodData Central SR Legacy
 
 - Purpose: nutrition values
-- Version: 2018-04
 - Source: [USDA FoodData Central downloads](https://fdc.nal.usda.gov/download-datasets/)
 - License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 - Attribution: U.S. Department of Agriculture, Agricultural Research Service. FoodData Central
@@ -30,7 +28,6 @@ RecipeMonster builds a simple multilingual ingredient catalog from the sources b
 ## Fineli Open Data
 
 - Purpose: optional nutrition values
-- Version: rolling snapshot, not included in the standard release build
 - Source: [Fineli Open Data](https://fineli.fi/fineli/en/open-data)
 - License: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
 - Attribution: Finnish Institute for Health and Welfare, Fineli
