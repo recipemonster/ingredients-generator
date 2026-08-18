@@ -1,0 +1,16 @@
+taxonomy_key,dataset,id_type,record_id
+beef meat,ciqual,record,6231
+corn,usda-sr-legacy,usda_ndb,11167
+cornmeal,usda-sr-legacy,usda_ndb,20020
+crouton,ciqual,record,7432
+lima bean,ciqual,record,20529
+nougat,ciqual,record,31127
+oat flakes,ciqual,record,32140
+palm oil,ciqual,record,16150
+palm oil and fat,ciqual,record,16150
+pork fillet,usda-sr-legacy,usda_ndb,10218
+pork knuckle,ciqual,record,28474
+pork loin,ciqual,record,28302
+split pea,ciqual,record,20515
+tomato,ciqual,record,20385
+whole wheat,usda-sr-legacy,usda_ndb,20072

@@ -1,0 +1,6 @@
+/raw/*
+!/raw/.gitignore
+/dist/*
+!/dist/.gitignore
+__pycache__/
+*.py[cod]

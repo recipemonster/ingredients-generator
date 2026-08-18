@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "fineli",
+      "role": "nutrition",
+      "name": "Fineli Open Data, Basic package 2",
+      "version": "rolling-snapshot",
+      "homepage": "https://fineli.fi/fineli/en/open-data",
+      "attribution": "Finnish Institute for Health and Welfare, Fineli",
+      "license": {
+        "name": "Creative Commons Attribution 4.0 International",
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "assets": [
+        {
+          "id": "archive",
+          "url": "https://fineli.fi/fineli/content/file/49",
+          "file": "fineli-basic-2.zip",
+          "format": "zip",
+          "sha256": "",
+          "maximumBytes": 10485760,
+          "manualDownload": true
+        }
+      ]
+    },
+    {
+      "id": "ciqual",
+      "role": "nutrition",
+      "name": "Anses-Ciqual French food composition table 2025",
+      "version": "2025-11-03",
+      "homepage": "https://doi.org/10.57745/RDMHWY",
+      "attribution": "Anses. 2025. Ciqual French food composition table",
+      "license": {
+        "name": "Etalab Open License 2.0",
+        "spdx": "etalab-2.0",
+        "url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/"
+      },
+      "assets": [
+        {
+          "id": "foods",
+          "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/666252",
+          "file": "alim_2025_11_03.xml",
+          "format": "xml",
+          "sha256": "e0b1de25b3039028205e9d54a96892e403e1b313c2efeb41180fabe132627478",
+          "maximumBytes": 4194304
+        },
+        {
+          "id": "nutrients",
+          "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/666246",
+          "file": "const_2025_11_03.xml",
+          "format": "xml",
+          "sha256": "3a231ea3e9836e4ac0b6ff94511e010210b2523d1b8b486c6b29e211066ba3f3",
+          "maximumBytes": 1048576
+        },
+        {
+          "id": "values",
+          "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/666249",
+          "file": "compo_2025_11_03.xml",
+          "format": "xml",
+          "sha256": "8c46a9032ece4eab4ffccc9dfcb0c490ec2f416aa664cc1ee013b241c6bdd4af",
+          "maximumBytes": 104857600
+        }
+      ]
+    },
+    {
+      "id": "usda-sr-legacy",
+      "role": "nutrition",
+      "name": "USDA FoodData Central SR Legacy",
+      "version": "2018-04",
+      "homepage": "https://fdc.nal.usda.gov/download-datasets/",
+      "attribution": "U.S. Department of Agriculture, Agricultural Research Service. FoodData Central",
+      "license": {
+        "name": "United States public domain",
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "assets": [
+        {
+          "id": "archive",
+          "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip",
+          "file": "FoodData_Central_sr_legacy_food_csv_2018-04.zip",
+          "format": "zip",
+          "sha256": "b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0",
+          "maximumBytes": 16777216
+        }
+      ]
+    },
+    {
+      "id": "openfoodfacts-ingredients",
+      "role": "identity",
+      "name": "Open Food Facts ingredient taxonomy",
+      "version": "2026-08-17",
+      "homepage": "https://github.com/openfoodfacts/openfoodfacts-server/blob/main/taxonomies/food/ingredients.txt",
+      "attribution": "Open Food Facts contributors. Ingredient taxonomy",
+      "license": {
+        "name": "Open Database License 1.0",
+        "spdx": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+        "contentName": "Database Contents License 1.0",
+        "contentSpdx": "DbCL-1.0",
+        "contentUrl": "https://opendatacommons.org/licenses/dbcl/"
+      },
+      "assets": [
+        {
+          "id": "taxonomy",
+          "url": "https://raw.githubusercontent.com/openfoodfacts/openfoodfacts-server/main/taxonomies/food/ingredients.txt",
+          "file": "openfoodfacts-ingredients.txt",
+          "format": "text",
+          "sha256": "65334ae1bf5c536a792c43e67b0a6ba9750da5128d118cce162f98afc9c25264",
+          "maximumBytes": 8388608
+        }
+      ]
+    }
+  ]
+}
