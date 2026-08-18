@@ -64,6 +64,19 @@ class PipelineTest(unittest.TestCase):
 
         self.assertEqual(simplified.names, {"en": ("tomato",), "pl": ("pomidor",)})
 
+    def test_omits_unreviewed_localized_name_identical_to_english(self) -> None:
+        ingredient = TaxonomyIngredient(
+            key="black pudding",
+            names={
+                "en": ("black pudding",),
+                "de": ("Black Pudding", "Blutwurst"),
+            },
+            parents=(),
+            properties={},
+        )
+
+        self.assertEqual(simplify_source_names(ingredient).names, {"en": ("black pudding",)})
+
     def test_builds_localized_name_files_and_one_nutrition_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

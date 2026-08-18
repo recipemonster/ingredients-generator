@@ -12,7 +12,7 @@ from .adapters import NutritionRecord, SourceAdapter
 from .ciqual import CIQUALAdapter
 from .config import Source, load_nutrient_mappings
 from .download import verify_downloads
-from .normalize import stable_id
+from .normalize import normalize_name, stable_id
 from .taxonomy import (
     TaxonomyIngredient,
     base_ingredients,
@@ -198,8 +198,14 @@ def prepare_catalog(
 
 def simplify_source_names(ingredient: TaxonomyIngredient) -> TaxonomyIngredient:
     names: dict[str, tuple[str, ...]] = {}
+    english_names = {
+        normalize_name(value)
+        for value in localized_names(ingredient, "en")
+    }
     for language in ingredient.names:
         values = localized_names(ingredient, language)
+        if language != "en" and values and normalize_name(values[0]) in english_names:
+            continue
         if values:
             names[language] = (values[0],)
     return TaxonomyIngredient(
